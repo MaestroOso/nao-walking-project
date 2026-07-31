@@ -1,0 +1,60 @@
+# ============================================================
+# Temporary: the whole working project folder is untracked for
+# now. Folder structure/what-to-keep hasn't been deliberately
+# decided yet (test_24 vs. earlier iterations vs. test_25).
+# This line will be narrowed or removed in a future session.
+# ============================================================
+/nao_walking_project/
+
+# ============================================================
+# Patterns below apply once nao_walking_project/ content (or
+# its eventual restructured layout) is added to the repo.
+# ============================================================
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg-info/
+.pytest_cache/
+
+# --- Virtual environments ---
+isaac_env/
+venv/
+env/
+.venv/
+
+# --- Isaac Sim caches/generated state ---
+*.usd
+*.usda
+*.usdc
+kit_cache/
+.nvidia-omniverse/
+
+# --- RL training artifacts (checkpoints, logs, metrics) ---
+*.zip                  # model checkpoints (final_model.zip, ckpt_*.zip, model_*.zip, etc.)
+*.tfevents.*            # TensorBoard event files
+tb/
+runs/
+training_logs/
+results_*/
+monitor.csv
+monitor.monitor.csv
+episodes.csv
+progress.txt
+training_log.txt
+
+# --- Logs ---
+logs/*.log
+*.log
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*~
