@@ -19,20 +19,53 @@ into NVIDIA Isaac Sim, builds a Gym-compatible RL environment around it
 (joint-angle/velocity/orientation observations, joint-position actions),
 and trains policies (starting with PPO) to produce a stable forward gait.
 
+## Repository Structure
+
+```
+nao-walking-project/
+├── CLAUDE.md                    # session-to-session project context (source of truth for status)
+├── docs/
+│   ├── environment-setup/       # how to reproduce the dev environment from scratch
+│   │   └── README.md            #   Isaac Sim install, NAO URDF/mesh sourcing, troubleshooting
+│   └── experiment-history.md    # full narrative of all ~25 training experiments
+├── experiments/                 # archival tier: code + NOTES.md for the pivotal experiments
+│   ├── test_01_standing/        #   only the turning-point experiments are migrated in full —
+│   ├── test_04_position/        #   see docs/experiment-history.md for the complete narrative,
+│   ├── ...                      #   including experiments not migrated as folders
+│   └── test_24/
+└── walking-solutions/           # working/promoted tier: validated results meant to be built on
+    ├── README.md                #   how this tier is organized, how to add a 2nd algorithm
+    ├── shared/                  #   robot URDF/meshes, materials, reference-gait data —
+    │                            #   one canonical copy, referenced by every algorithm below
+    └── ppo/
+        └── baseline_test24/     #   current working forward-walking baseline
+```
+
+`experiments/` and `walking-solutions/` serve different purposes: the
+former is a historical record (what was tried, what broke, what was
+learned — the reasoning behind decisions that isn't visible from final
+code alone), the latter is what you'd actually run or build on today.
+
 ## Current Status
 
-- ~25 training experiments run to date, iterating on physics stability,
-  pose selection, reward shaping, and reference-gait guidance.
-- The most recent confirmed-working setup is a single-robot training
-  pipeline (physics stable, reward function producing a working
-  forward-walking behavior).
-- A code refactor toward a more modular, multi-algorithm structure has
-  been started, aimed at eventually supporting multiple robots training
-  in parallel for faster data collection. This refactor is not yet
-  validated against the working single-robot pipeline and is paused for
-  now.
-- The repository is being migrated from local working files into version
-  control; project history and folder structure are still being organized.
+- **Environment & robot setup:** documented and reproducible — see
+  `docs/environment-setup/` for the full Isaac Sim installation and NAO
+  URDF/mesh integration process.
+- **Experiment history:** ~25 training experiments run to date (physics
+  stability → pure RL → hand-designed reference gait → literal Webots
+  motion-capture gait). Full narrative in `docs/experiment-history.md`;
+  the 12 pivotal experiments are also migrated as runnable code +
+  learnings under `experiments/`.
+- **Working baseline:** a single-robot PPO policy (promoted from
+  `test_24`) that walks forward, currently ~20.9M of a 50M-step training
+  target. Lives at `walking-solutions/ppo/baseline_test24/`, referencing
+  shared robot/gait assets rather than duplicating them.
+- **Next:** develop and evaluate a second RL algorithm alongside PPO for
+  comparison (see `CLAUDE.md` phase 6), under a new
+  `walking-solutions/<algorithm>/` folder.
+- A separate, unvalidated refactor toward a modular multi-robot training
+  structure (`test_25` in the original experiment set) was paused and is
+  intentionally not part of this migration.
 
 ## Getting Oriented
 
