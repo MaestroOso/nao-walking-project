@@ -14,7 +14,7 @@ args = parser.parse_args()
 deterministic = not args.stochastic
 
 print("="*70)
-print(f"NAO Walking — Evaluation (test_16)")
+print(f"NAO Walking — Evaluation (baseline_test24)")
 print(f"  Model: {args.model}, Episodes: {args.episodes}, Det: {deterministic}")
 print("="*70)
 
@@ -58,7 +58,7 @@ for ep in range(args.episodes):
     print(f"{ep+1:>4} {step:>6} {total_r:>8.1f} {avg_r:>8.2f} {xd:>7.3f}m {avg_v:>7.3f}m/s {tr:<15}")
 
 print("\n"+"="*75)
-print("SUMMARY (test_16)")
+print("SUMMARY (baseline_test24)")
 steps=[s["steps"] for s in stats]; rewards=[s["reward"] for s in stats]
 dists=[s["x_dist"] for s in stats]; vels=[s["avg_vel"] for s in stats]
 surv=sum(1 for s in stats if s["survived"])
