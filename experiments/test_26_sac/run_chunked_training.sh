@@ -3,15 +3,11 @@
 # test_24 for comparability. Time-bounded, not a 50M-step commitment —
 # see APPROACH.md.
 #
-# Extended overnight (12h) after the initial 2h pilot (145,000 steps,
-# clean across 29 chunk boundaries) showed a real, steady learning
-# trend with no mechanism issues. CHUNK_STEPS raised from 5,000 to
-# 15,000 for this longer run — the frequent-boundary pilot already
-# verified the resume mechanism thoroughly, so the priority now shifts
-# to cutting restart overhead (~15-20s/chunk fixed cost: was ~7-10% of
-# wall-clock at 5,000 steps/chunk, drops to ~2% at 15,000) while still
-# restarting often enough for Isaac Sim's long-run memory hygiene
-# (the reason this project has used chunked training since test_07).
+# History: 2h initial pilot (145,000 steps, 29 chunks) -> 12h overnight
+# extension (to 1,165,000 steps, 68 more chunks, committed to the repo)
+# -> 24h extension (to 3,325,000 steps, 144 more chunks, 241 total,
+# still clean) -> this 12h extension. CHUNK_STEPS stays at 15,000 —
+# resume mechanism verified across 241 boundaries with zero issues.
 #
 # Replay-buffer RAM footprint (computed from actual obs/action dims):
 #   obs=23, action=12, buffer_size=1e6, float32, handle_timeout_termination=True:
@@ -21,12 +17,11 @@
 #   buffer, is what that gate is actually protecting against).
 
 RUN_NAME="sac_pilot"
-MAX_WALLCLOCK_SECONDS=43200  # 12 hour overnight extension
-TOTAL_STEPS=3000000          # generous backstop ceiling, not expected to bind
-CHUNK_STEPS=15000            # raised from 5,000 (see note above) — resume
-                             # mechanism already verified across 29 boundaries
-                             # in the initial pilot, so bigger chunks now to
-                             # cut restart overhead for the longer run
+MAX_WALLCLOCK_SECONDS=43200  # 12 hour extension
+TOTAL_STEPS=5000000          # unchanged — at ~24.9 steps/sec observed,
+                             # 12h adds ~1.08M steps, landing ~4.4M,
+                             # still comfortably under this backstop
+CHUNK_STEPS=15000            # unchanged (see note above)
 URDF="../../walking-solutions/shared/robot/nao.urdf"
 RUN_DIR="runs/${RUN_NAME}"
 PROGRESS_FILE="${RUN_DIR}/progress.txt"

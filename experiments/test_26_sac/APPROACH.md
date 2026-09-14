@@ -435,8 +435,202 @@ correct across 97 chunk restarts), learning trend clear and substantial,
 confirmed both numerically and visually. Not yet a sustained walker, and
 not yet claimed to be — see the leftward-drift finding above.
 
+**Extended again for 24h** (same run, resumed from 1,165,000 steps) to
+see whether the improvement trend continues, whether the `critic_loss`
+uptick stabilizes or keeps growing, and whether the fall-height margin
+(0.098m vs. the 0.10m threshold) closes further. `MAX_WALLCLOCK_SECONDS`
+-> 86400, `TOTAL_STEPS` backstop raised to 5,000,000 (the old 3,000,000
+ceiling would have bound partway through at current throughput);
+`CHUNK_STEPS` unchanged at 15,000.
+
+## 24h extension results (1,165,000 → 3,325,000 steps)
+
+Completed 2,160,000 additional steps in 86,778s (~24h06m), 144 more
+chunks (241 total across all three sessions), zero crashes/retries/NaNs.
+Throughput kept improving: SB3's `time/fps` now steady at ~23-25;
+overall throughput (incl. restart overhead) ~24.9 steps/sec, up from
+~23.5 in the 12h session and ~19.8 in the initial pilot.
+
+### `ep_len_mean` / `ep_rew_mean` — still climbing
+
+| step (≈) | ep_rew_mean | ep_len_mean |
+|---|---|---|
+| 1,246,000 | 279.6 | 86.6 |
+| 1,570,000 | 267.2 | 84.8 |
+| 1,911,000 | 315.1 | 92.5 |
+| 2,269,000 | 347.4 | 97.0 |
+| 2,638,000 | 362.1 | 99.0 |
+| 3,022,000 | 380.1 | 104.2 |
+| 3,324,000 | 389.5 | 108.2 |
+
+Brief dip around 1.4M-1.6M steps, then resumed climbing through the
+whole rest of the session — not a plateau yet. From the raw 38,456-
+episode monitor log: first-50 vs. last-50, reward **55.2 → 385.3** (7x
+since the very start), length **51.1 → 110.1** (2.15x). Max episode
+length ever seen: 158. Max episode reward ever seen: 539.
+
+**The "falls almost immediately" regime is now nearly gone.** 62%
+(initial pilot) → 19.2% (after 12h) → **9.5% overall, 0.4% of the last
+500 episodes**. This failure mode has essentially resolved itself with
+continued training.
+
+### Losses, entropy, Q-values
+
+- **`critic_loss`: the earlier uptick reversed.** It had crept from ~30
+  to ~56 by the end of the 12h session (flagged as "worth watching," not
+  yet a problem). Over this 24h session it **decreased** from ~50 back
+  down to **~30**, ending the session lower than it started. Reads as
+  transient — likely tied to the reward-scale still growing at that
+  point — rather than a sustained degradation.
+- **`ent_coef` reversed direction**: after monotonically decaying for the
+  first ~1.2M steps (0.28 → ~0.03), it's now **climbing back up** (0.033
+  → 0.057 over this session) — SAC's auto-tuning pushing entropy back up
+  as the policy's actual entropy fell below `target_entropy` (-12). Not
+  a red flag on its own (this is exactly what the auto-tuning mechanism
+  is for), but a real reversal worth tracking if it continues.
+- **`actor_loss`** continues trending more negative (−112 → −125),
+  consistent with the pattern from the previous session.
+- **Mean Q-value** (same fixed-512-state method, now sampled from the
+  final full/recycling buffer): 123.9 (10k) → 101.3 (1.165M) → **123.7**
+  (final, 3.325M) — went down then back up to roughly where it started.
+  Bounded, not runaway, though this method evaluates checkpoints against
+  a state sample that mixes old and new experience, so it's a rougher
+  signal than it would be with a fixed evaluation set — treat as
+  directional, not precise.
+
+### Final checkpoint evaluation (3,325,000 steps, deterministic, 10 episodes)
+
+All 10 episodes identical again (expected):
+- Episode length: **101 steps**
+- Episode reward: **401.5**
+- Forward distance: **1.934 m**
+- Average velocity: **0.574 m/s**
+- Termination: fell, height=**0.100m** — right at the `term_height=0.10`
+  threshold, the closest yet to not falling at all
+- Classification: "✓ WALKING DETECTED" — 1.934m is now within 7cm of the
+  "★ SUSTAINED WALKING!" (>2.0m) threshold
+
+### Full progression (all three sessions, deterministic eval each time)
+
+| | 145k steps | 1.165M steps | 3.325M steps |
+|---|---|---|---|
+| Episode reward | 181.4 | 349.0 | **401.5** |
+| Forward distance | 0.506 m | 1.710 m | **1.934 m** |
+| Avg. velocity | 0.150 m/s | 0.552 m/s | **0.574 m/s** |
+| Fall height | 0.075 m | 0.098 m | **0.100 m** (at threshold) |
+| % episodes at grace-period floor (training) | 62% | 19.2% | **9.5%** (0.4% of last 500) |
+
+The fall-height margin has now closed to essentially zero, and forward
+distance is approaching the sustained-walking threshold. The trend
+across all three checkpoints is monotonic on every metric — no sign of
+having plateaued yet.
+
+## Status (updated)
+
+**3,325,000 steps, not yet committed** (this extension). Mechanism
+remains fully verified across 241 total chunk restarts. Every metric —
+reward, distance, velocity, fall-height margin, grace-period-floor
+fraction — has improved monotonically across all three checkpoints
+evaluated so far (145k / 1.165M / 3.325M). Not yet sustained walking by
+the script's own >2.0m bar, but only 0.066m short of it at the current
+checkpoint. Leftward-drift issue (visual inspection, 1.165M-step
+checkpoint) not yet re-checked at this checkpoint.
+
+**Extended a third time for 12h** (resumed from 3,325,000 steps), given
+the trend still hadn't plateaued and the fall-height margin had closed
+to essentially zero — close enough to sustained walking to be worth
+seeing whether it crosses that line with more training.
+`MAX_WALLCLOCK_SECONDS` -> 43200, `TOTAL_STEPS`/`CHUNK_STEPS` unchanged
+(projected ~4.4M steps by the end, still under the 5,000,000 backstop).
+
+## 12h extension results (3,325,000 → 4,450,000 steps) — apparent breakthrough near the end
+
+Completed 1,125,000 additional steps in 43,733s (~12h09m), 75 more
+chunks (316 total across all four sessions), zero crashes/retries/NaNs.
+Throughput continued improving slightly: overall ~25.7 steps/sec, up
+from ~24.9 in the previous session.
+
+For most of the session, the trend continued the same steady climb as
+before: `ep_len_mean` ~109 → ~119, `ep_rew_mean` ~396 → ~448 through the
+first ~90% of this session's steps. **Then, in roughly the last ~150,000
+steps, something changed qualitatively**, not just incrementally:
+
+- `ep_len_mean` jumped from ~119 to **180** in the final logged points
+  (individual episodes up to 182 in that window).
+- `ep_rew_mean` jumped from ~448 to **527**.
+- Individual episode lengths in the raw monitor log near the end include
+  **543, 266, 300, 870, and 775 steps** — far beyond anything seen in
+  any prior session (previous max across the whole run was 158 steps).
+- **Max episode length ever recorded: 1,263 steps** — 84% of
+  `max_episode_steps=1500`, i.e. close to the full episode window
+  without falling. **Max episode reward ever: 2,671.6.**
+
+This is not yet consistent, though — in the last 300 episodes: mean
+length 154, but ranging from 52 (still occasionally falls almost
+immediately) to 1,263. Only 22 of the last 300 episodes exceeded 300
+steps, and 10 exceeded 500. **The grace-period-floor fraction has
+otherwise kept improving** (7.6% overall, 0.2% of the last 500 episodes)
+— so the *typical* episode is still ~150ish steps, but the policy has
+now demonstrably found the long-duration behavior at least some of the
+time, which it had never done at all in the first three sessions.
+
+Mean Q-value (same fixed-sample method): 117.2 (10k) → 114.8 (3.325M) →
+**128.2** (final) — still bounded, ticking up alongside the reward jump.
+
+### Final checkpoint evaluation (4,450,000 steps, deterministic, 10 episodes)
+
+All 10 episodes identical again:
+- Episode length: **1,500 steps — hit `max_episode_steps` every time**
+- Episode reward: **3,451.6**
+- Forward distance: **2.680 m**
+- Average velocity: **0.054 m/s**
+- Termination: none — never fell, all 10/10
+
+By raw numbers this crosses both thresholds that have been tracked
+throughout: never falls, and covers >2.0m (`evaluate_policy.py` prints
+"★ SUSTAINED WALKING!"). **But this needs an important caveat, not a
+victory lap:**
+
+**Velocity dropped ~10x, from 0.574 m/s (previous checkpoint) to
+0.054 m/s.** The policy isn't walking fast and reliably — it's moving
+*extremely* slowly and cautiously for the full 1500-step window. Given
+the reward formula (`5.0·(forward vel) + slow-ramping alive bonus −
+orientation/lateral penalties`, `alive_scale=500`, ramping with step
+count — see `test_24`'s reward, unchanged here, and recall `test_12`'s
+own history of a *different* alive-bonus exploit earlier in this
+project), a policy that survives all 1500 steps banks a large cumulative
+alive bonus regardless of how much forward progress it makes. The reward
+(3,451.6) is far higher than any previous checkpoint's, but that's
+consistent with either "genuinely much better" or "found a way to farm
+the alive bonus by barely moving instead of walking" — **the eval script's
+own distance-only classification ("SUSTAINED WALKING") doesn't
+distinguish between these**, which is itself worth noting: distance
+crossing 2.0m was being used as the sustained-walking bar, but 2.68m
+over 1500 steps at 0.054 m/s is not the same achievement as 2.68m
+covered quickly. This looks like the same *category* of problem as
+`test_12`'s fall-fast exploit and `test_18`'s dive-and-slide exploit —
+a reward-hacking pattern specific to this alive-bonus structure — just a
+different, opposite-direction instance of it (crawl-slowly-forever vs.
+fall-fast).
+
+**Not concluding this is definitely reward hacking rather than genuine
+progress** — worth checking against the training-time stochastic
+behavior (which showed real variance, including some fast, short, high
+per-step-reward episodes) and via visual inspection before deciding.
+But the velocity collapse is too large to just note in passing; this is
+the main thing to resolve before treating 4.45M steps as the new
+baseline.
+
 ## Next steps
 
+- **Determine whether the 4.45M-step checkpoint's "never falls" behavior
+  is genuine slow-but-stable walking or alive-bonus farming.** Highest
+  priority — visually inspect this checkpoint, and/or evaluate a couple
+  of the intermediate `ckpt_*_steps.zip` files from the transition window
+  (~4.3M-4.45M) to see whether velocity degrades gradually or snaps to
+  near-zero. If it's farming, the reward likely needs a fix analogous to
+  `test_12`'s (scale/cap the alive bonus, or tie it to maintaining
+  forward progress) before treating this checkpoint as the new baseline.
 - Investigate the leftward-drift behavior found in visual inspection —
   the reward has no heading/yaw term at all, only a lateral-*velocity*
   penalty, so nothing currently discourages turning. Worth deciding
