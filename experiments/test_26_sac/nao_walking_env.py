@@ -196,6 +196,23 @@ class NaoWalkingEnv(gym.Env):
         "RThumb1_link",   "RThumb2_link",
     ]
 
+    # Spawn orientation, in Isaac Sim's SCALAR-FIRST (w, x, y, z) quaternion
+    # convention — the convention every isaacsim.core get/set_world_pose
+    # call uses (confirmed in the installed Isaac Sim 4.5 source,
+    # isaacsim.core.prims .../articulation.py get_world_poses docstring).
+    #
+    # [0, 0, 0, 1] in (w, x, y, z) is a 180° rotation about world z, so the
+    # robot's URDF +x axis (its forward direction) points along WORLD -x.
+    # That is the real reason "forward is world -x" throughout the project.
+    # It is kept unchanged so that distance/velocity measured along world
+    # -x (evaluation scripts, report protocol) still means "forward".
+    #
+    # QUATERNION FIX (see APPROACH.md "Quaternion convention fix"): every env
+    # up to and including the v2 reward revision read get_world_pose()'s
+    # quaternion as (x, y, z, w). That made side tilt (roll) invisible in
+    # projected gravity and made yaw show up as tilt instead.
+    SPAWN_QUAT_WXYZ = np.array([0.0, 0.0, 0.0, 1.0])
+
     # Crouched home pose — matches real NAO walking posture
     LEG_HOME_POSE_DEG = {
         "LHipYawPitch": 0, "LHipRoll": 0,   "LHipPitch": -20,
@@ -238,6 +255,7 @@ class NaoWalkingEnv(gym.Env):
         reward_alive=1.0,
         penalty_orientation=0.5,
         penalty_lateral_vel=0.5,
+        penalty_yaw_rate=0.5,
         alive_scale=500.0,
         term_height=0.10,
         term_orient_qw=0.3,
@@ -270,6 +288,7 @@ class NaoWalkingEnv(gym.Env):
         self.w_alive        = reward_alive
         self.w_orient       = penalty_orientation
         self.w_lateral      = penalty_lateral_vel
+        self.w_yaw          = penalty_yaw_rate
         self.alive_scale    = alive_scale
         self.term_height    = term_height
         self.term_orient_qw = term_orient_qw
@@ -518,7 +537,7 @@ class NaoWalkingEnv(gym.Env):
             except Exception:
                 self._has_lin_vel_api = False
 
-        self._prev_quat = np.array([0.0, 0.0, 0.0, 1.0], dtype=np.float32)
+        self._prev_quat = self.SPAWN_QUAT_WXYZ.astype(np.float32)
         self._settle_physics()
         self._sim_initialized = True
 
@@ -591,7 +610,7 @@ class NaoWalkingEnv(gym.Env):
     def _teleport_to_start(self):
         self._nao.set_world_pose(
             position=np.array([0.0, 0.0, self.spawn_height]),
-            orientation=np.array([0.0, 0.0, 0.0, 1.0]),
+            orientation=self.SPAWN_QUAT_WXYZ.copy(),
         )
         self._nao.set_joint_positions(self._full_home_pose)
         self._nao.set_joint_velocities(np.zeros(self._num_dof))
@@ -636,7 +655,7 @@ class NaoWalkingEnv(gym.Env):
         _, quat = self._nao.get_world_pose()
         self._prev_quat = (quat.copy().astype(np.float32)
                            if quat is not None and not np.any(np.isnan(quat))
-                           else np.array([0., 0., 0., 1.], dtype=np.float32))
+                           else self.SPAWN_QUAT_WXYZ.astype(np.float32))
 
         return self._get_obs(), {}
 
@@ -692,7 +711,11 @@ class NaoWalkingEnv(gym.Env):
 
         proj_gravity = self._quat_rotate_inverse(quat, np.array([0, 0, -1.0]))
         ang_vel      = self._get_angular_velocity(quat)
-        lin_vel      = self._get_linear_velocity()
+        # HEADING-frame (forward, lateral) velocity, the same quantities the
+        # reward uses. After the quaternion fix, projected gravity no longer
+        # (wrongly) leaks yaw into the observation, so world-frame velocity
+        # would be uninterpretable to the policy once the robot turns.
+        lin_vel      = self._get_heading_velocity(quat)
 
         leg_pos = np.zeros(self.n_legs, dtype=np.float32)
         if jp is not None:
@@ -720,33 +743,50 @@ class NaoWalkingEnv(gym.Env):
         ])
         return np.nan_to_num(obs, nan=0.0, posinf=0.0, neginf=0.0)
 
-    def _get_linear_velocity(self):
-        if self._has_lin_vel_api:
-            try:
-                v = self._nao.get_linear_velocity()
-                if v is not None and not np.any(np.isnan(v)):
-                    return np.array([float(v[0]), float(v[1])], dtype=np.float32)
-            except Exception:
-                pass
-        return np.zeros(2, dtype=np.float32)
+    def _get_heading_velocity(self, quat):
+        """(forward, lateral) base velocity in the HEADING frame, in m/s.
+
+        The heading frame is the world frame rotated by the robot's yaw
+        only: forward = horizontal direction the robot faces, lateral =
+        90° to its left. Unlike the full body frame, pitch/roll do not mix
+        vertical velocity into "forward", so falling/pitching forward
+        earns no forward credit. Returns zeros if velocity or orientation
+        is unavailable.
+        """
+        if not self._has_lin_vel_api or quat is None or np.any(np.isnan(quat)):
+            return np.zeros(2, dtype=np.float32)
+        try:
+            v = self._nao.get_linear_velocity()
+        except Exception:
+            return np.zeros(2, dtype=np.float32)
+        if v is None or np.any(np.isnan(v)):
+            return np.zeros(2, dtype=np.float32)
+        yaw = self._yaw_from_quat(quat)
+        c, s = math.cos(yaw), math.sin(yaw)
+        forward = c * float(v[0]) + s * float(v[1])
+        lateral = -s * float(v[0]) + c * float(v[1])
+        return np.array([forward, lateral], dtype=np.float32)
 
     def _get_angular_velocity(self, quat):
+        """Body-frame angular velocity, scaled by 0.25 (observation scale)."""
         if self._has_ang_vel_api:
             try:
-                w = self._nao.get_angular_velocity()
+                w = self._nao.get_angular_velocity()   # world frame
                 if w is not None and not np.any(np.isnan(w)):
                     return (self._quat_rotate_inverse(quat, w) * 0.25).astype(np.float32)
             except Exception:
                 pass
 
+        # Fallback: finite difference of orientation. Body-frame delta
+        # rotation is conj(q_prev) ⊗ q_curr; all quaternions are (w, x, y, z).
         if quat is not None and not np.any(np.isnan(quat)):
-            px, py, pz, pw = self._prev_quat
-            cx, cy, cz, cw = quat
-            dw =  cw*pw + cx*px + cy*py + cz*pz
-            dx = -cw*px + cx*pw - cy*pz + cz*py
-            dy = -cw*py + cx*pz + cy*pw - cz*px
-            dz = -cw*pz - cx*py + cy*px + cz*pw
-            if dw < 0: dx, dy, dz, dw = -dx, -dy, -dz, -dw
+            pw, px, py, pz = (float(e) for e in self._prev_quat)
+            cw, cx, cy, cz = (float(e) for e in quat)
+            dw = pw*cw + px*cx + py*cy + pz*cz
+            dx = pw*cx - px*cw - py*cz + pz*cy
+            dy = pw*cy - py*cw - pz*cx + px*cz
+            dz = pw*cz - pz*cw - px*cy + py*cx
+            if dw < 0: dx, dy, dz = -dx, -dy, -dz
             return (2.0 * np.array([dx, dy, dz], dtype=np.float32) / self.control_dt * 0.25)
 
         return np.zeros(3, dtype=np.float32)
@@ -757,39 +797,65 @@ class NaoWalkingEnv(gym.Env):
 
     @staticmethod
     def _quat_rotate_inverse(quat, vec):
-        x, y, z, w = float(quat[0]), float(quat[1]), float(quat[2]), float(quat[3])
+        """Rotate a world-frame vector into the body frame.
+
+        `quat` is Isaac Sim's SCALAR-FIRST (w, x, y, z) world orientation.
+        (Before the quaternion fix this unpacked (x, y, z, w) — see
+        SPAWN_QUAT_WXYZ comment.)
+        """
+        w, x, y, z = float(quat[0]), float(quat[1]), float(quat[2]), float(quat[3])
         q = np.array([-x, -y, -z])
         t = 2.0 * np.cross(q, vec)
         return (vec + w * t + np.cross(q, t)).astype(np.float32)
+
+    @staticmethod
+    def _yaw_from_quat(quat):
+        """Heading angle (rotation about world z) of a (w, x, y, z) quaternion.
+        At spawn this is π: the robot faces world -x."""
+        w, x, y, z = float(quat[0]), float(quat[1]), float(quat[2]), float(quat[3])
+        return math.atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
 
     # ══════════════════════════════════════════════════════════════════════════
     # Reward
     # ══════════════════════════════════════════════════════════════════════════
     def _compute_reward(self, action):
-        forward_vel = 0.0
-        lateral_vel = 0.0  # NEW
-        if self._has_lin_vel_api:
-            try:
-                v = self._nao.get_linear_velocity()
-                if v is not None and not np.any(np.isnan(v)):
-                    forward_vel = -float(v[0])
-                    lateral_vel = float(v[1])  # NEW: y-axis is sideways
-            except Exception:
-                pass
+        # v3 reward (see APPROACH.md "Quaternion convention fix"):
+        # forward/lateral velocity are measured in the HEADING frame (yaw
+        # only), so "forward" means "the horizontal direction the robot is
+        # facing". No sign flip is needed: the URDF +x axis is the robot's
+        # forward direction. (The old "-v[0]" / "-v_body[0]" flips existed
+        # only because the spawn quaternion is a 180° yaw and the quaternion
+        # was being read in the wrong order.) At spawn, forward == -v_world_x,
+        # identical to the convention validated in test_23.
+        _, quat = self._nao.get_world_pose()
+        quat_valid = quat is not None and not np.any(np.isnan(quat))
+
+        forward_vel, lateral_vel = (float(c) for c in self._get_heading_velocity(quat))
+
+        # New: explicit yaw-rate penalty — directly discourages spinning,
+        # which nothing else in this reward previously penalized (the
+        # orientation term below only sees pitch/roll via projected
+        # gravity, which is yaw-invariant).
+        yaw_rate = 0.0
+        if quat_valid:
+            # _get_angular_velocity returns body-frame angular velocity
+            # scaled by 0.25 for observation purposes; undo that scaling
+            # for the reward so w_yaw operates on the real magnitude.
+            yaw_rate = float(self._get_angular_velocity(quat)[2]) / 0.25
 
         r_forward = self.w_forward * forward_vel
         r_alive   = self.w_alive * (1.0 + self._step_count / max(self.alive_scale, 1.0))
-        r_lateral = -self.w_lateral * (lateral_vel ** 2)  # NEW: squared so sign-agnostic
+        r_lateral = -self.w_lateral * (lateral_vel ** 2)
+        r_yaw     = -self.w_yaw * (yaw_rate ** 2)
 
-        _, quat = self._nao.get_world_pose()
-        if quat is not None and not np.any(np.isnan(quat)):
+        if quat_valid:
             pg = self._quat_rotate_inverse(quat, np.array([0, 0, -1.0]))
             orient_error = pg[0]**2 + pg[1]**2
         else:
             orient_error = 1.0
         r_orient = -self.w_orient * orient_error
 
-        return float(r_forward + r_alive + r_orient + r_lateral)
+        return float(r_forward + r_alive + r_orient + r_lateral + r_yaw)
 
     # ══════════════════════════════════════════════════════════════════════════
     # Termination
@@ -803,7 +869,12 @@ class NaoWalkingEnv(gym.Env):
         if pos[2] < self.term_height:
             return True
         if quat is not None and not np.any(np.isnan(quat)):
-            if abs(float(quat[3])) < self.term_orient_qw:
+            # |w| of the rotation relative to spawn = |<q, q_spawn>|.
+            # < 0.3 means rotated more than ~145° from the spawn pose.
+            # (Numerically identical to the old abs(quat[3]) check, since
+            # q_spawn = (0,0,0,1) — now written so it no longer depends on
+            # that coincidence.)
+            if abs(float(np.dot(quat, self.SPAWN_QUAT_WXYZ))) < self.term_orient_qw:
                 return True
         return False
 

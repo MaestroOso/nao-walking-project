@@ -3,11 +3,17 @@
 # test_24 for comparability. Time-bounded, not a 50M-step commitment —
 # see APPROACH.md.
 #
-# History: 2h initial pilot (145,000 steps, 29 chunks) -> 12h overnight
-# extension (to 1,165,000 steps, 68 more chunks, committed to the repo)
-# -> 24h extension (to 3,325,000 steps, 144 more chunks, 241 total,
-# still clean) -> this 12h extension. CHUNK_STEPS stays at 15,000 —
-# resume mechanism verified across 241 boundaries with zero issues.
+# v2: REWARD REVISED (body-frame velocity + yaw-rate penalty, see
+# APPROACH.md "Reward revision"). The original lineage (RUN_NAME
+# "sac_pilot", 145,000 -> 7,060,000 steps across 491 chunk attempts,
+# committed) trained under the old world-frame-only reward and is left
+# untouched under runs/sac_pilot/ as the historical record of why the
+# reward changed. This is a FRESH start — new SAC(), empty replay
+# buffer, new run name "sac_pilot_v2" — not a resume, since the old
+# buffer's stored rewards are computed under the old formula and would
+# be wrong under the new one. CHUNK_STEPS=15,000 carried over unchanged
+# (proven across 491 chunk attempts in the original run, one transient
+# GPU-driver hang recovered cleanly by the existing retry logic).
 #
 # Replay-buffer RAM footprint (computed from actual obs/action dims):
 #   obs=23, action=12, buffer_size=1e6, float32, handle_timeout_termination=True:
@@ -16,11 +22,32 @@
 #   Comfortably inside the MIN_RAM_MB gate below (Isaac Sim itself, not the
 #   buffer, is what that gate is actually protecting against).
 
-RUN_NAME="sac_pilot"
-MAX_WALLCLOCK_SECONDS=43200  # 12 hour extension
-TOTAL_STEPS=5000000          # unchanged — at ~24.9 steps/sec observed,
-                             # 12h adds ~1.08M steps, landing ~4.4M,
-                             # still comfortably under this backstop
+# v3: QUATERNION CONVENTION FIX (see APPROACH.md "Quaternion convention
+# fix"). Isaac Sim quaternions are (w,x,y,z); every env through v2 read
+# them as (x,y,z,w), so side tilt was invisible to the policy/penalty and
+# v2's "body-frame" velocity was effectively still world-frame. The
+# observation semantics change (projected gravity, ang vel, heading-frame
+# lin_vel), so this is again a FRESH start under a new run name;
+# runs/sac_pilot_v2/ (4,995,000 steps, v2 env) is left untouched.
+# The v2 notes below (MAX_WALLCLOCK comment) describe that previous run.
+RUN_NAME="sac_pilot_v3"
+MAX_WALLCLOCK_SECONDS=28800  # 8 hour batch. [v2 run] Previous 12h block (3,255,000
+                             # -> 4,290,000 steps) raised training-time
+                             # ep_len_mean 76->84 and ep_rew_mean 287->315,
+                             # but the DETERMINISTIC checkpoint eval was
+                             # identical at both ends of that block: falls
+                             # at step 51, same fall height (0.062m), only
+                             # forward speed improved (0.238->0.319 m/s).
+                             # (Note: the "0.720 m/s / 82 steps" figure
+                             # previously written here for the 3,255,000-
+                             # step checkpoint could not be corroborated in
+                             # APPROACH.md and is believed to have been in
+                             # error — superseded by the re-measured
+                             # 0.238 m/s / 51 steps above.) Running another
+                             # 8h to see whether the deterministic failure
+                             # point moves at all.
+TOTAL_STEPS=6000000          # backstop only; MAX_WALLCLOCK_SECONDS is the
+                             # real limit per batch (raised from 5M in v2)
 CHUNK_STEPS=15000            # unchanged (see note above)
 URDF="../../walking-solutions/shared/robot/nao.urdf"
 RUN_DIR="runs/${RUN_NAME}"

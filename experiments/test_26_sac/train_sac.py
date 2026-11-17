@@ -157,8 +157,11 @@ else:
                 tensorboard_log=os.path.join(run_dir, "tb"))
 
 with open(os.path.join(run_dir, "config.txt"), "w") as f:
-    f.write("test_26_sac pilot: single-robot, literal Webots ref gait + residual "
-            "(scale=0.25rad), obs=23 — SAME env/reward/physics as test_24\n")
+    f.write("test_26_sac: single-robot, literal Webots ref gait + residual "
+            "(scale=0.25rad), obs=23. Env v3 — DIFFERS from test_24: quaternion "
+            "read as (w,x,y,z) (fixes roll-invisible projected gravity), "
+            "heading-frame lin_vel in obs + reward, yaw-rate penalty w=0.5 "
+            "(see APPROACH.md 'Quaternion convention fix')\n")
     f.write(f"SAC (SB3 2.7.1 defaults except net_arch/gamma matched to test_24): "
             f"lr={args.lr}, net_arch=[128,128], buffer_size=1_000_000, "
             f"learning_starts=100, batch_size=256, tau=0.005, gamma=0.99, "

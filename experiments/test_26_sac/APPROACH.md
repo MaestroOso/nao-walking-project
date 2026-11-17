@@ -621,29 +621,267 @@ But the velocity collapse is too large to just note in passing; this is
 the main thing to resolve before treating 4.45M steps as the new
 baseline.
 
+### Visual inspection (4,450,000-step checkpoint)
+
+Confirms the concern above. The robot **tilts over onto one leg and
+holds there, statically balanced, never falling** — not walking. This
+is consistent with the alive-bonus-farming hypothesis: a static,
+lopsided-but-stable pose trivially avoids the fall-termination
+condition and banks the survival-scaled alive bonus for the entire
+1500-step episode, which apparently outweighs whatever reward genuine
+(riskier) forward walking would have earned. Decided to continue
+training anyway to see whether more steps (and `ent_coef`'s renewed
+climb, reinjecting exploration) let it escape this local optimum on its
+own, before touching the reward function. If a further extension
+doesn't move off this static pose, the likely fix is reward-side —
+capping/reshaping the alive bonus so survival alone can't outweigh
+forward progress, the same category of fix `test_12` and `test_18`
+needed for their own alive-bonus exploits.
+
+## 24h extension #2 results (4,450,000 → 7,060,000 steps) — mixed: real training-time progress, but the deterministic policy still shows the same underlying pattern
+
+**Incident: a genuine GPU hang, not slow training.** Partway through
+this session, one chunk's Isaac Sim process deadlocked at the renderer
+level (`[Fatal] rtx.scenedb.plugin: Waiting on Semaphore ... longer than
+60s`, 0% GPU utilization, ~5 hours with no progress vs. the normal ~10
+minutes/chunk). Killed the stuck process manually; the wrapper's
+existing retry logic (`if $? -ne 0 ... retrying in 10s`) picked it up
+correctly and resumed cleanly from the last saved checkpoint
+(7,060,000 steps) — but by the time it retried, the ~5-hour stall had
+already pushed elapsed wall-clock past the 86400s cap, so the run
+stopped instead of continuing. No training data lost (checkpoints are
+saved before each chunk starts), but ~5 of the ~28.5 hours were wasted
+wall-clock. First and only chunk failure in 491 total chunk attempts
+across the whole project — a very low rate; the existing retry
+mechanism handled it exactly as designed and needs no changes.
+
+**Training-time metrics show real, substantial movement:**
+- `ep_len_mean` jumped from the ~110-180 range to a peak of **940.9**
+  early this session (individual episodes up to 1077), then oscillated
+  in the 700-900 range for most of the session before **declining again
+  toward the end** (down to ~480-535) — not a clean monotonic
+  improvement, more volatile than any prior session.
+- **597 episodes total have now hit `max_episode_steps` (1500) without
+  falling at all** — a real, repeatable rate, not a one-off.
+- First-50 vs. last-50 raw episodes: length 51 → 554, reward 55 → 1082.
+- `critic_loss` continued improving (down to ~13-17, its best yet).
+  `ent_coef` climbed further (0.06-0.09 range, higher than any prior
+  session) — more sustained exploration throughout.
+
+**Deterministic evaluation (7,060,000 steps, 10 episodes) — the
+important number, and it's not a clean win:**
+- Episode length: **791 steps** (down from 1500 at the 4.45M
+  checkpoint)
+- Reward: **1417.2**
+- Forward distance: **2.333 m** (down slightly from 2.680m)
+- Average velocity: **0.088 m/s** (up from 0.054 m/s, but still far
+  below the 0.57 m/s seen at 3.325M steps, before the static-pose
+  checkpoint)
+- Termination: **tilt** (orientation limit, `qw=0.300`, exactly at
+  `term_orient_qw=0.3`) — not a height-based fall this time
+
+**This still looks like a variant of the same underlying strategy, not
+a breakthrough into real walking.** At 4.45M steps, the deterministic
+policy found a static, extremely-tilted pose stable enough to never
+trip the height-based fall condition for the full episode. At 7.06M
+steps, it's still tilting (that's literally the termination reason),
+still moving very slowly (0.088 m/s), and now it eventually tips past
+the *orientation* limit instead of surviving the whole episode — a
+worse outcome by that specific measure, even though velocity ticked up
+slightly. The much longer/higher-reward episodes visible in the
+*training-time* stochastic data may be the exploration noise
+(`ent_coef` climbing) occasionally finding genuinely better
+trajectories that the deterministic policy hasn't consolidated onto —
+worth visual inspection to confirm one way or the other, same as for
+the 4.45M checkpoint.
+
+## Reward revision — body-frame velocity + yaw-rate penalty
+
+**Visual confirmation at 7,060,000 steps** (user inspection): tilts to one
+side, turns in place, no forward movement, eventually falls — the same
+underlying pattern as the 4.45M checkpoint, not resolved by more
+training. Decided this needed a reward-side fix rather than more
+wall-clock time.
+
+**Diagnosis.** The reward had no term that required *directed* forward
+locomotion:
+- `forward_vel`/`lateral_vel` were raw **world-frame** velocity
+  components — "forward" meant a fixed world axis, not "the direction
+  the robot is facing." A robot that spins can register `r_forward`
+  credit from incidental world-frame drift without ever walking in a
+  consistent heading.
+- There was **no yaw term at all**. `r_orient` (the existing orientation
+  penalty) uses the projected-gravity vector, which only captures
+  pitch/roll — rotating around the vertical axis costs nothing.
+- The alive bonus (kept, deliberately — removing/weakening it risks
+  reopening `test_12`'s fall-fast exploit, which the user had already
+  independently observed happening again when alive-bonus pressure is
+  too weak) still rewards survival regardless of whether that survival
+  involves any actual locomotion.
+
+**Fix implemented** (`nao_walking_env.py`, `_compute_reward`):
+1. `forward_vel`/`lateral_vel` now computed in the robot's own body
+   frame via `_quat_rotate_inverse` (the same helper already used for
+   `proj_gravity`/`ang_vel` — no new primitive).
+2. New `r_yaw = -w_yaw * yaw_rate²` term (`penalty_yaw_rate=0.5`, same
+   scale as the existing orientation/lateral penalties), using
+   `_get_angular_velocity`'s body-frame angular velocity (its z-component
+   is yaw rate), with its `×0.25` observation-display scaling undone so
+   the reward operates on the real magnitude.
+3. Alive bonus, orientation penalty, and the `5.0`/`0.5` weights on the
+   unchanged terms are all untouched.
+
+**Sign convention empirically verified, not assumed**
+(`verify_bodyframe_sign.py`, committed alongside): ran the literal
+reference gait (zero residual action — known to walk in the intended
+direction, since that's the convention the original `-v[0]` world-frame
+fix in `test_23` was validated against) for 120 steps and compared
+`body_vel[0]` against the already-validated world-frame forward signal.
+Correlation: **-0.97** — body-frame `+x` is the robot's *backward*
+direction, so the reward uses `forward_vel = -v_body[0]`, mirroring the
+original world-frame sign fix for the new frame.
+
+**Reward sanity-checked** (`verify_reward_terms.py`, committed
+alongside) before trusting it in training: under the smooth
+zero-residual gait, `yaw_rate` is tiny (abs mean 0.0058, implied
+`r_yaw ≈ -0.0001`) — negligible penalty for walking as intended. Under a
+jerky random-residual rollout, `yaw_rate` is much larger (abs mean 1.56,
+max 9.7), implied `r_yaw ≈ -2.68` — a real, substantial penalty. No
+NaNs or crashes in either case.
+
+**Decided to modify `test_26_sac` in place rather than fork a new
+experiment folder** — accepting that this breaks the original "only the
+algorithm changes vs. `test_24`" premise for everything from this point
+forward, in exchange for keeping one continuous, honestly-documented
+history rather than fragmenting it. Everything above this section in
+`APPROACH.md` describes the original reward (unchanged from `test_24`);
+everything from here on describes training under the revised reward.
+
+**Decided to start completely fresh** (new `SAC()`, empty replay
+buffer) rather than warm-start from the 7,060,000-step checkpoint — the
+old buffer's stored rewards were computed under the old formula and
+would be flatly wrong under the new one, and the old actor/critic
+weights are tuned to both the old reward's value scale and to the
+degenerate tilt-and-spin behavior being moved away from. New run lives
+under `runs/sac_pilot_v2/`; `runs/sac_pilot/` (the original 7.06M-step
+lineage) is left untouched as the historical record this section
+documents.
+
+**Smoke-tested** (two 150-step chunks, fresh start then resume) before
+trusting this in a real run: `num_timesteps` and replay buffer size both
+continuous across the resume (300 after 150+150), zero NaNs, reward
+range sane (early random-policy rewards are quite negative, -50 to
+-157, consistent with an untrained policy wobbling into the new yaw
+penalty on top of the existing terms — expected, not a bug).
+
+**v2 run outcome (`runs/sac_pilot_v2/`, 0 → 4,995,000 steps):** recorded
+so far only in `run_chunked_training.sh`'s header comment. The
+deterministic checkpoint eval was the same at 3,255,000 and 4,290,000
+steps: falls at step 51, fall height 0.062 m, with forward speed
+0.238 → 0.319 m/s. The section below explains why the v2 revision could
+not have worked as intended.
+
+## Quaternion convention fix (v3) — 2026-11-17
+
+**Bug.** Isaac Sim's `get_world_pose()` / `set_world_pose()` use
+**scalar-first (w, x, y, z)** quaternions (confirmed in the installed
+Isaac Sim 4.5 source: `isaacsim.core.prims/.../articulation.py`,
+`get_world_poses` docstring). Every env in this project, back to
+`test_10` and including `baseline_test24` (PPO), unpacked them as
+`(x, y, z, w)` in `_quat_rotate_inverse` and in the finite-difference
+angular-velocity fallback.
+
+**Consequences** (derived analytically, then confirmed in a numpy
+reproduction):
+
+| True motion (20°) | Projected gravity, old code | Correct |
+|---|---|---|
+| Roll (side tilt) | `[0, 0, -1]`, **invisible** | `[0, -0.342, -0.940]` |
+| Pitch | `[-0.342, 0, -0.940]` (sign flipped) | `[0.342, 0, -0.940]` |
+| Yaw (turning) | `[0, 0.342, -0.940]`, **looks like a tilt** | `[0, 0, -1]` |
+
+1. The policy could not observe side tilt, and the orientation penalty
+   never charged for it. This matches the 4.45M-step checkpoint
+   "tilting over onto one leg and holding there": that posture cost
+   nothing.
+2. The "orientation penalty" was in practice a *heading-deviation*
+   penalty. Report Eq. 4-2 / Table 4-3 describe it as torso inclination.
+3. The spawn orientation `[0, 0, 0, 1]` is read by Isaac as **(w, x, y, z)**,
+   i.e. a 180° yaw. That is the real reason the robot's forward
+   direction is world −x. The `test_23` world-frame sign fix (`-v[0]`)
+   was correct, but for this reason, not a URDF axis convention.
+4. v2's "body-frame" velocity: with the robot near upright, the
+   misread quaternion is ≈ identity, so `v_body` ≈ world-frame
+   velocity. The −0.97 correlation in `verify_bodyframe_sign.py` was a
+   symptom of the bug, not a sign convention. The v2 reward change was
+   therefore effectively only the yaw-rate penalty.
+5. The termination check `|quat[3]| < 0.3` happened to be correct.
+   Because q_spawn = (0,0,0,1), `quat[3]` equals the scalar part of the
+   rotation relative to spawn, so ">~145° from the spawn pose" held.
+
+**Fix (this experiment only — PPO baseline intentionally untouched for
+now, so SAC no longer shares PPO's env):**
+- `_quat_rotate_inverse` and the angular-velocity fallback now read
+  (w, x, y, z). The fallback also now computes the body-frame delta
+  `conj(q_prev) ⊗ q_curr`; the old formula computed the world-frame one.
+- New `SPAWN_QUAT_WXYZ` constant (spawn unchanged, so world −x is still
+  forward for evaluation/report purposes); termination now written as
+  `|<q, q_spawn>| < 0.3`, which is numerically identical but explicit.
+- New `_get_heading_velocity()`: (forward, lateral) velocity in the
+  **heading frame** (world rotated by yaw only). It is used in the
+  **reward**, with no sign flip, since URDF +x is forward. It is also
+  used in the **observation**, replacing world-frame (vx, vy). Without
+  that, once the gravity vector stops leaking yaw, the policy would have
+  no way to interpret world-frame velocity after turning. A heading
+  frame is used rather than the full body frame so a pitched/falling
+  torso cannot convert vertical velocity into "forward" credit.
+- Yaw-rate penalty (w=0.5) kept; it now reads a correct body-frame z
+  angular velocity.
+- Observation is still 23-dim, but components 0-7 change meaning. Old
+  checkpoints are **not** compatible. Fresh run: `runs/sac_pilot_v3/`.
+
+**Verification:**
+- Offline (numpy, mock robot): heading-frame forward velocity = 0.2 m/s
+  for a 0.2 m/s walk at robot yaw 0°, 45°, −90°. A pure vertical drop
+  while pitched 30° gives 0 forward. A finite-difference fallback
+  1° roll per step → 0.524 rad/s, as expected.
+- In Isaac Sim (`verify_quat_fix.py`): **PASS**.
+  - Spawn: heading −180°, pg = (0, 0, −1).
+  - Zero-residual gait: heading-frame forward correlates **+0.967**
+    with the validated −v_world_x signal; mean +0.086 m/s.
+  - Teleported 20° tilts: roll → pg = (0, −0.342, −0.94);
+    pitch → (0.342, 0, −0.94); yaw → (0, 0, −1).
+
+**Observation worth keeping in mind.** In that same zero-residual run,
+the robot's heading drifted **+115.7°** in 120 steps before falling. The
+raw reference gait turns strongly in this simulator. The old buggy
+orientation term was implicitly penalizing that drift; the new reward
+only penalizes yaw *rate*, and forward credit is heading-relative. So
+the policy can in principle earn reward while walking in a slow circle.
+If v3 shows that, add a heading-deviation penalty (e.g. on
+`1 - cos(yaw - yaw_spawn)`).
+
 ## Next steps
 
-- **Determine whether the 4.45M-step checkpoint's "never falls" behavior
-  is genuine slow-but-stable walking or alive-bonus farming.** Highest
-  priority — visually inspect this checkpoint, and/or evaluate a couple
-  of the intermediate `ckpt_*_steps.zip` files from the transition window
-  (~4.3M-4.45M) to see whether velocity degrades gradually or snaps to
-  near-zero. If it's farming, the reward likely needs a fix analogous to
-  `test_12`'s (scale/cap the alive bonus, or tie it to maintaining
-  forward progress) before treating this checkpoint as the new baseline.
-- Investigate the leftward-drift behavior found in visual inspection —
-  the reward has no heading/yaw term at all, only a lateral-*velocity*
-  penalty, so nothing currently discourages turning. Worth deciding
-  whether to add a heading-deviation penalty, or whether more training
-  resolves it the way the "falls almost immediately" regime did.
-- Continue the SAC pilot further (more wall-clock) to see whether the
-  reward/length trend keeps climbing, plateaus, or the `critic_loss`
-  uptick noted above stabilizes or keeps growing.
+- **Superseded by the quaternion fix above:** the v2 body-frame revision
+  did not do what it intended. Train v3 (`runs/sac_pilot_v3/`) and check
+  the deterministic eval for real forward walking, and for slow circling
+  (heading drift).
+- Launch a real training run under the new reward (`runs/sac_pilot_v3/`)
+  and watch for the same two things that mattered before: whether
+  `ep_len_mean`/`ep_rew_mean` climb the way they did originally, and
+  whether the *deterministic* checkpoint evaluation shows an actual
+  forward-walking gait rather than another degenerate local optimum —
+  don't trust training-time aggregate stats alone this time, given what
+  happened at 4.45M/7.06M steps.
+- Watch `critic_loss` — it had an unexplained-but-self-resolving uptick
+  in the original run; worth checking it behaves similarly here rather
+  than assuming the pattern repeats.
 - Fix `evaluate_policy.py`'s stdout-capture gap (add `--log-file`/
   `TeeOutput`) so future evaluations don't require digging through Kit
   logs.
 - Fix the `Monitor` override bug in the original PPO script too, so
   future PPO runs don't lose the same episode history SAC's did.
 - Decide whether a dedicated same-step PPO comparison run is worth the
-  wall-clock cost for the academic report, or whether the trend data
-  above (SAC's own learning curve) is sufficient on its own.
+  wall-clock cost for the academic report, or whether SAC's own
+  learning curve (under the revised reward) is sufficient on its own.
