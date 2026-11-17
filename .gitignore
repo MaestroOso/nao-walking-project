@@ -50,6 +50,7 @@ training_log.txt
 # --- Logs ---
 logs/*.log
 *.log
+*.pdf
 
 # --- OS / editor ---
 .DS_Store
