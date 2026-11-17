@@ -136,16 +136,24 @@ _Update this section at the end of every session._
   at `walking-solutions/ppo/baseline_test24/`, ~20.9M of a 50M-step
   target. Reward formula and full config documented in that folder's
   `README.md`.
-- **Phase 6 (Algorithm Experimentation & Analysis):** not started —
-  planned next step is adding a second RL algorithm under
-  `walking-solutions/<algorithm>/` for comparison against the PPO
-  baseline.
-- **Last session:** migrated experiment history and environment setup
-  documentation into the repository (environment setup guide, 12
-  archival experiments with learnings, `walking-solutions/` working tier
-  seeded with the PPO baseline); updated this file and `README.md`
-  accordingly.
-- **Next step:** choose and begin implementing the second RL algorithm.
+- **Phase 6 (Algorithm Experimentation & Analysis):** in progress.
+  SAC (`experiments/test_26_sac/`, run `sac_pilot_v2`) is still training.
+  PGRL is planned but not implemented. A common evaluation script for all
+  algorithms is in `experiments/test_evaluation_script/` and implements the
+  report's protocol (§4.6.2, §5.1): straight course of D m, deterministic
+  policy, 10 repetitions per initial-pose perturbation δ ∈ {0,1,2,4}°,
+  F_S and fall-rate metrics. It also produces Table 5-3 and Figure 5-3.
+- **Report:** `docs/report/` (Spanish, LaTeX PDF). Chapter 5 results are
+  mostly still `[PENDIENTE]`.
+- **Last session (17 Nov 2026):** built and committed the evaluation
+  script. First PPO evaluation runs: there are two copies of the PPO
+  `test_24` run (27.2M steps in `~/nao_walking_project/`, the default, and
+  22.35M steps in the gitignored `<repo>/nao_walking_project/`). Results and
+  caveats are in that folder's `README.md`. The speeds measured (about
+  0.46–0.9 m/s) are suspiciously high and need a visual check with `--gui`.
+- **Next step:** visually confirm the PPO gait, evaluate SAC when its
+  training finishes, implement the PGRL adapter, and fill chapter 5 of the
+  report.
 
 ---
 
