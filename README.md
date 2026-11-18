@@ -33,6 +33,7 @@ nao-walking-project/
 │   ├── test_04_position/        #   see docs/experiment-history.md for the complete narrative,
 │   ├── ...                      #   including experiments not migrated as folders
 │   └── test_24/
+├── robot-integration/           # runs the trained policies on the real NAO via ROS 2 (see its README)
 └── walking-solutions/           # working/promoted tier: validated results meant to be built on
     ├── README.md                #   how this tier is organized, how to add a 2nd algorithm
     ├── shared/                  #   robot URDF/meshes, materials, reference-gait data —

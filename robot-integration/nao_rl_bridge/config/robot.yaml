@@ -1,0 +1,59 @@
+# robot.yaml — how THIS robot is driven (hardware side).
+# deployment.yaml (per solution) says how a policy was trained; this file
+# holds the settings that belong to the robot, the laptop and the protocol.
+# Unknown keys are rejected (typo protection). Defaults:
+# nao_rl_bridge/core/robot_config.py
+
+robot:
+  ip: nao.local            # robot address on the Ethernet link
+  port: 9559               # NAOqi port
+
+topics:                    # naoqi_driver2 defaults
+  joint_states: /joint_states
+  imu: /imu/torso
+  joint_angles: /joint_angles
+
+command:
+  speed_fraction: 1.0      # JointAnglesWithSpeed.speed: fraction of max motor speed
+  hip_yaw_pitch_mode: mean # one motor drives both HipYawPitch joints: mean | left
+
+stiffness:
+  legs: 1.0                # PPO/SAC legs; PGRL multiplies this by its stiffness factors
+  arms_head: 0.8
+  max: 1.0                 # NAOqi maximum; PGRL factors above it are clamped
+  ramp_s: 1.0              # stiffness ramp-up time before moving
+
+prepare:
+  disable_autonomous_life: true
+  fall_manager_enabled: true     # keep NAOqi's own fall protection
+  smart_stiffness_enabled: false # constant stiffness, as in simulation
+  move_duration_s: 3.0           # interpolation to the warm-up pose
+  settle_s: 1.0
+  max_pose_error_deg: 5.0        # abort if any joint is further than this from the pose
+
+estimator:
+  velocity_filter_alpha: 0.5     # EMA on the kinematic velocity estimate (1 = no filter)
+  height_offset_m: 0.0025        # FK torso height + this = sim height (foot box 2.5 mm below
+                                 # the URDF sole; measured with tools/check_sim_traces.py)
+
+safety:
+  max_joint_step_deg: 12.0       # per 33 ms control step (~6.3 rad/s)
+  fall_tilt_deg: 40.0            # torso tilt that counts as a fall and stops the run
+  min_base_height_m: 0.20        # estimated torso height that counts as a fall
+  sensor_timeout_s: 0.1          # abort if joint states / IMU are older than this
+  max_consecutive_overruns: 5    # abort if the 30 Hz loop is late this many ticks in a row
+
+protocol:                        # report §5.1.1
+  distance_m: 1.0
+  auto_finish_on_odometry: false # true: stop when the odometry estimate reaches distance_m
+  base_seed: 0                   # repetition k uses seed base_seed + k (same as simulation)
+
+finish:                          # what to do when a run ends: home | freeze | rest
+  on_success: home
+  on_timeout: home
+  on_fall: rest
+  on_aborted: freeze
+  home_duration_s: 1.5
+
+logging:
+  run_root: ~/nao_robot_runs

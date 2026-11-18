@@ -59,3 +59,8 @@ Thumbs.db
 .idea/
 *.swp
 *~
+
+# --- colcon workspace output (robot-integration/nao_rl_bridge built from the repo root) ---
+/build/
+/install/
+/log/

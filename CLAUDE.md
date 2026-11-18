@@ -151,6 +151,15 @@ _Update this section at the end of every session._
   22.35M steps in the gitignored `<repo>/nao_walking_project/`). Results and
   caveats are in that folder's `README.md`. The speeds measured (about
   0.46–0.9 m/s) are suspiciously high and need a visual check with `--gui`.
+- **Robot integration (18 Nov 2026):** `robot-integration/` deploys the
+  policies to the real NAO over ROS 2 Jazzy (`naoqi_driver2` for the
+  30 Hz joint stream, a direct `qi` session for stiffness, posture, rest
+  and e-stop). Each `walking-solutions/<algo>/<variant>/` needs a
+  `deployment.yaml` (written for `ppo/baseline_test24`). The tools,
+  runtime, ROS node and docs are done and tested. Still pending: the final
+  PPO/SAC/PGRL folders with their `deployment.yaml`, their exports (run
+  `export/export_policy.py`), and the runs on the robot. Procedure:
+  `robot-integration/docs/deployment-procedure.md`.
 - **Next step:** visually confirm the PPO gait, evaluate SAC when its
   training finishes, implement the PGRL adapter, and fill chapter 5 of the
   report.
