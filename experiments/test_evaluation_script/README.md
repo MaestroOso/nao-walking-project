@@ -60,7 +60,7 @@ DISTANCE=1.5 ./run_all_evaluations.sh --overwrite
 
 # A single algorithm / custom checkpoint
 python evaluate_algorithms.py --algo sac --distance 1.0
-python evaluate_algorithms.py --algo sac --model ../test_26_sac/runs/sac_pilot_v2/ckpt_4995000_steps.zip --label SAC_4.995M
+python evaluate_algorithms.py --algo sac --model ../test_26_sac/runs/sac_pilot_v3/ckpt_<N>_steps.zip --label SAC_<N>
 python evaluate_algorithms.py --algo ppo --deltas 0 --repetitions 3 --gui    # watch it
 python evaluate_algorithms.py --algo pgrl                                     # test_28 pgrl_v1
 python evaluate_algorithms.py --algo pgrl --model ../test_28/runs/<run> --label PGRL_<run>
@@ -76,7 +76,7 @@ Default models (latest version of each algorithm, overridable with `--model` / `
 | `--algo` | Model | Environment (`nao_walking_env.py` folder) |
 |---|---|---|
 | `ppo` | `~/nao_walking_project/experiments/test_24/runs/test24/final_model.zip` (27.2M steps, outside the repo; see "PPO model choice") | `walking-solutions/ppo/baseline_test24/` |
-| `sac` | `experiments/test_26_sac/runs/sac_pilot_v2/final_model.zip` (still training — re-run when it finishes) | `experiments/test_26_sac/` |
+| `sac` | `experiments/test_26_sac/runs/sac_pilot_v3/final_model.zip` (env v3; only v3 checkpoints are valid with the current `test_26_sac` env — v1/v2 models get mismatched observations) | `experiments/test_26_sac/` |
 | `pgrl` | `experiments/test_28/runs/pgrl_v1` (θ from `state.json`, mapped with that run's ranges from `config.json`; run folder is gitignored). `--pgrl-initial` uses the initial parameters instead (label it `PGRL_base`) | `experiments/test_28/` |
 
 The script changes into the env folder before creating the env, because the

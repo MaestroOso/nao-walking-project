@@ -78,8 +78,11 @@ ALGO_DEFAULTS = {
         "env_dir": REPO_ROOT / "walking-solutions/ppo/baseline_test24",
     },
     "sac": {
-        # Latest SAC run (body-frame reward revision, still training).
-        "model": REPO_ROOT / "experiments/test_26_sac/runs/sac_pilot_v2/final_model.zip",
+        # Latest SAC run: sac_pilot_v3 (env v3: quaternion fix, heading-frame
+        # velocity, looped gait). Older runs (sac_pilot, sac_pilot_v2) were
+        # trained on an earlier env and must NOT be evaluated with the current
+        # test_26_sac env — their observations no longer match.
+        "model": REPO_ROOT / "experiments/test_26_sac/runs/sac_pilot_v3/final_model.zip",
         "env_dir": REPO_ROOT / "experiments/test_26_sac",
     },
     "pgrl": {
