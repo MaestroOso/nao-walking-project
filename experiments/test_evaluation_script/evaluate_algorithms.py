@@ -4,7 +4,7 @@ evaluate_algorithms.py — Common evaluation protocol for every walking algorith
 ================================================================================
 
 Implements the evaluation protocol of the report (§4.6.2 and §5.1) once, so
-PPO, SAC and (later) PGRL are all measured in exactly the same way:
+PPO, SAC and PGRL are all measured in exactly the same way:
 
   * Straight-line course of D metres (``--distance``) along the robot's forward
     direction (world -x, the convention used by every env in this project).
@@ -37,6 +37,8 @@ Usage (inside the Isaac Sim Python environment):
     python evaluate_algorithms.py --algo ppo --distance 1.0
     python evaluate_algorithms.py --algo sac --distance 1.5 --deltas 0 1 2 4
     python evaluate_algorithms.py --algo sac --model path/to/ckpt.zip --label SAC_ckpt4M
+    python evaluate_algorithms.py --algo pgrl                       # test_28 pgrl_v1
+    python evaluate_algorithms.py --algo pgrl --pgrl-initial --label PGRL_base
 """
 
 import argparse
@@ -80,7 +82,12 @@ ALGO_DEFAULTS = {
         "model": REPO_ROOT / "experiments/test_26_sac/runs/sac_pilot_v2/final_model.zip",
         "env_dir": REPO_ROOT / "experiments/test_26_sac",
     },
-    "pgrl": {"model": None, "env_dir": None},
+    "pgrl": {
+        # PGRL run pgrl_v1 (166 iterations, 1992 evaluations, gains in [-1, 1]).
+        # Run folders are gitignored; re-create with test_28/run_chunked_training.sh.
+        "model": REPO_ROOT / "experiments/test_28/runs/pgrl_v1",
+        "env_dir": REPO_ROOT / "experiments/test_28",
+    },
 }
 
 CSV_COLUMNS = [
@@ -177,27 +184,80 @@ class SB3Adapter(PolicyAdapter):
 
 
 class PGRLAdapter(PolicyAdapter):
-    """Placeholder for the PGRL controller (report §4.5.3) — not implemented yet.
+    """PGRL controller from experiments/test_28 (report §4.5.3).
 
-    What PGRL needs to provide to plug into this evaluation:
-      * A controller built from the 12 optimised parameters (4 ZMP compensator
-        gains, gait frequency/amplitude factors, 6 leg stiffness factors) on
-        top of its base gait. The "base gait without compensator" row of
-        Table 5-3 is the same adapter with gains = 0 and initial parameters
-        (give it its own --label, e.g. PGRL_base).
-      * make_env(): an env satisfying the evaluation-env contract in
-        PolicyAdapter. If the controller computes joint targets itself, the
-        env's step(action) can simply accept those targets; act(obs) then
-        returns them. Stiffness parameters must be applied after every
-        world.reset() (same rule as _apply_gains() in NaoWalkingEnv).
-      * The same warm-up / grace / termination / 1500-step limit as PPO/SAC so
-        the comparison stays fair, and set_leg_offset() for the perturbation.
+    The policy is the 12-parameter vector θ found by PGRL (4 torso-tilt
+    compensator gains, gait frequency / amplitude factors, 6 leg stiffness
+    factors) applied to the looped Webots gait of test_27. The controller
+    lives INSIDE the env (`PGRLWalkingEnv.step()` computes the joint targets
+    from the parameters and ignores its `action` argument), so act() returns
+    nothing.
+
+    * `model_path`: a run folder or its `state.json` (e.g.
+      experiments/test_28/runs/pgrl_v1). θ is mapped to physical values with
+      the parameter ranges THAT run was trained with (its config.json),
+      because the ranges changed after pgrl_v1 (gains [-1,1] -> [-3,3]).
+    * `initial=True`: ignore the model and use the initial parameters
+      (gains 0, f = a = 1, stiffness 1) — the "PGRL base gait without
+      compensator" row of Table 5-3 (use --label PGRL_base).
+
+    The env subclasses the PPO baseline NaoWalkingEnv, so warm-up, grace
+    period, fall criteria and the 1500-step limit are the same as PPO/SAC;
+    make_evaluation_env_class() adds the initial-pose perturbation exactly as
+    for the other algorithms.
     """
 
-    def __init__(self, *args, **kwargs):
-        raise NotImplementedError(
-            "PGRL evaluation is not implemented yet. See PGRLAdapter's docstring "
-            "in evaluate_algorithms.py for what needs to be provided.")
+    def __init__(self, model_path, env_dir, initial=False):
+        self.env_dir = Path(env_dir).resolve()
+        if not (self.env_dir / "pgrl_env.py").is_file():
+            sys.exit(f"[eval] No pgrl_env.py in env dir: {self.env_dir}")
+        sys.path.insert(0, str(self.env_dir))
+        import pgrl_params as P
+        self.P = P
+        self.initial = initial
+
+        if initial:
+            self.state_path, self.state = None, {}
+            self.specs = P.PARAM_SPECS
+            self.phys = P.to_physical(P.initial_theta(self.specs), self.specs)
+            src = "initial parameters"
+        else:
+            path = Path(model_path).resolve()
+            self.state_path = path / "state.json" if path.is_dir() else path
+            if not self.state_path.is_file():
+                sys.exit(f"[eval] PGRL state not found: {self.state_path}")
+            self.state = json.loads(self.state_path.read_text())
+            self.specs = P.load_run_specs(self.state_path.parent)
+            self.phys = P.to_physical(np.array(self.state["theta"]), self.specs)
+            src = (f"{self.state_path} (iteration {self.state.get('iteration')}, "
+                   f"{self.state.get('evals')} evaluations)")
+        print(f"[eval] PGRL policy: {src}")
+        for n, v in zip(P.NAMES, self.phys):
+            print(f"[eval]   {n:16s} {v:+.3f}")
+
+    def make_env(self, render_mode):
+        # pgrl_episode.make_env() wraps PGRLWalkingEnv with this script's
+        # make_evaluation_env_class() and changes into the baseline env folder
+        # (asset paths are relative to the CWD, as for PPO/SAC).
+        from pgrl_episode import make_env
+        env = make_env(render_mode)
+        env.set_params(phys=self.phys)      # applied on every reset()
+        return env
+
+    def act(self, obs):
+        return None
+
+    def describe(self):
+        return {
+            "policy": "initial parameters" if self.initial else str(self.state_path),
+            "state_sha256": None if self.initial else sha256_of(self.state_path),
+            "iteration": self.state.get("iteration"),
+            "evaluations": self.state.get("evals"),
+            "param_specs": self.specs,
+            "params_physical": {n: float(v) for n, v in zip(self.P.NAMES, self.phys)},
+            "env_dir": str(self.env_dir),
+            "env_file_sha256": sha256_of(self.env_dir / "pgrl_env.py"),
+        }
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -377,6 +437,9 @@ def parse_args():
     p.add_argument("--model", default=None, help="Model file (default: latest run of --algo)")
     p.add_argument("--env-dir", default=None,
                    help="Folder with the algorithm's nao_walking_env.py (default per --algo)")
+    p.add_argument("--pgrl-initial", action="store_true",
+                   help="PGRL only: use the initial parameters (base gait without "
+                        "compensator, Table 5-3 row PGRL_base) instead of --model")
     p.add_argument("--distance", type=float, default=1.0, help="Course length D [m]")
     p.add_argument("--deltas", type=float, nargs="+", default=[0.0, 1.0, 2.0, 4.0],
                    help="Perturbation amplitudes delta [deg]")
@@ -407,7 +470,9 @@ def main():
 
     defaults = ALGO_DEFAULTS[args.algo]
     if args.algo == "pgrl":
-        adapter = PGRLAdapter()
+        adapter = PGRLAdapter(args.model or defaults["model"],
+                              args.env_dir or defaults["env_dir"],
+                              initial=args.pgrl_initial)
     else:
         adapter = SB3Adapter(args.algo,
                              args.model or defaults["model"],

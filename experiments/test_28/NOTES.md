@@ -119,9 +119,16 @@ Training stopped at 1992 evaluations because 2000 is not a multiple of 12.
   parameters fall during the first step.
 - **Main limit:** the fall goes to the right (−0.167 m) and both roll gains
   sit at their bound, so side-to-side balance looks like the main limit.
-- **Policy vs. curve:** the final θ scores 0.072, slightly below the
-  0.078 mean of the last iteration. The training curve averages the 12
-  perturbed policies, not θ itself.
+- **GUI and headless runs give different numbers.** Headless, the same θ
+  gives d = 0.531 m, t = 1.73 s, lateral +0.020 m, F_S = 0.0813, in
+  `evaluate_policy.py --headless` and in the common evaluation script alike.
+  - Each mode is deterministic on its own, but the two modes differ. The
+    likely cause is that `world.step(render=True)` goes through the Kit app
+    update, which changes the physics stepping.
+  - Training and the official evaluation are headless, so **the headless
+    numbers are the ones to report**. The GUI is for qualitative viewing
+    only.
+  - The behaviour looks the same either way: two steps, then a fall.
 
 ## Gain range change (after `pgrl_v1`, 2026-11-17)
 - **Why:** three of the four compensator gains finished at the [−1, 1]

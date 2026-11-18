@@ -16,7 +16,7 @@
 set -u
 cd "$(dirname "$0")"
 
-ALGOS="${ALGOS:-ppo sac}"          # add "pgrl" once its adapter exists
+ALGOS="${ALGOS:-ppo sac pgrl}"     # pgrl also evaluates its base gait (PGRL_base)
 DISTANCE="${DISTANCE:-1.0}"        # course length D [m]
 DELTAS="${DELTAS:-0 1 2 4}"        # perturbation amplitudes [deg]
 REPS="${REPS:-10}"                 # repetitions per delta
@@ -30,6 +30,16 @@ for algo in $ALGOS; do
             --deltas $DELTAS --repetitions "$REPS" --base-seed "$BASE_SEED" "$@"; then
         echo "!! ${algo^^} evaluation FAILED"
         failed+=("$algo")
+    fi
+    if [ "$algo" = "pgrl" ]; then
+        echo "================ PGRL_base (initial parameters) ================"
+        # shellcheck disable=SC2086
+        if ! python evaluate_algorithms.py --algo pgrl --pgrl-initial --label PGRL_base \
+                --distance "$DISTANCE" --deltas $DELTAS --repetitions "$REPS" \
+                --base-seed "$BASE_SEED" "$@"; then
+            echo "!! PGRL_base evaluation FAILED"
+            failed+=("pgrl_base")
+        fi
     fi
 done
 

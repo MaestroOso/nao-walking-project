@@ -54,7 +54,7 @@ Inside the Isaac Sim Python environment:
 cd experiments/test_evaluation_script
 source ../../nao_walking_project/isaac_env/bin/activate
 
-# Everything (PPO + SAC, D = 1 m, δ = 0 1 2 4, N = 10), then summary + figure
+# Everything (PPO + SAC + PGRL + PGRL_base, D = 1 m, δ = 0 1 2 4, N = 10), then summary + figure
 ./run_all_evaluations.sh
 DISTANCE=1.5 ./run_all_evaluations.sh --overwrite
 
@@ -62,6 +62,9 @@ DISTANCE=1.5 ./run_all_evaluations.sh --overwrite
 python evaluate_algorithms.py --algo sac --distance 1.0
 python evaluate_algorithms.py --algo sac --model ../test_26_sac/runs/sac_pilot_v2/ckpt_4995000_steps.zip --label SAC_4.995M
 python evaluate_algorithms.py --algo ppo --deltas 0 --repetitions 3 --gui    # watch it
+python evaluate_algorithms.py --algo pgrl                                     # test_28 pgrl_v1
+python evaluate_algorithms.py --algo pgrl --model ../test_28/runs/<run> --label PGRL_<run>
+python evaluate_algorithms.py --algo pgrl --pgrl-initial --label PGRL_base    # base gait, no compensator
 
 # Rebuild table/figure only (no Isaac Sim needed)
 python summarize_results.py
@@ -74,7 +77,7 @@ Default models (latest version of each algorithm, overridable with `--model` / `
 |---|---|---|
 | `ppo` | `~/nao_walking_project/experiments/test_24/runs/test24/final_model.zip` (27.2M steps, outside the repo; see "PPO model choice") | `walking-solutions/ppo/baseline_test24/` |
 | `sac` | `experiments/test_26_sac/runs/sac_pilot_v2/final_model.zip` (still training — re-run when it finishes) | `experiments/test_26_sac/` |
-| `pgrl` | not implemented yet | — |
+| `pgrl` | `experiments/test_28/runs/pgrl_v1` (θ from `state.json`, mapped with that run's ranges from `config.json`; run folder is gitignored). `--pgrl-initial` uses the initial parameters instead (label it `PGRL_base`) | `experiments/test_28/` |
 
 The script changes into the env folder before creating the env, because the
 env files resolve the URDF and reference-gait paths relative to the working
@@ -148,15 +151,32 @@ Observations, still to be confirmed:
 
 ## Known issues
 
+- **GUI and headless runs are not numerically identical.** The same
+  deterministic policy gives different results with `--gui`; for example,
+  PGRL `pgrl_v1` gives F_S 0.0717 in the GUI and 0.0813 headless. Report
+  the headless numbers (the training conditions). Use `--gui` only to look
+  at the behaviour.
 - Once Isaac Sim starts it takes over stdout, so the per-episode table
   printed by `evaluate_algorithms.py` may not show in the console or in a
   redirected log. The CSV and JSON files are complete; use
   `summarize_results.py` to see the results.
 
-## Adding PGRL
+## PGRL
 
-`PGRLAdapter` in `evaluate_algorithms.py` is a stub. Its docstring, and the
-`PolicyAdapter` contract above it, describe what the controller and its env
-must provide. Once it's implemented, add `pgrl` to `ALGOS` in
-`run_all_evaluations.sh`. Evaluate the base gait without the compensator with
-the same adapter (gains = 0) and a different `--label`, e.g. `PGRL_base`.
+`PGRLAdapter` evaluates the PGRL controller from `experiments/test_28`:
+12 parameters (torso-tilt compensator gains, gait frequency/amplitude,
+leg stiffness) on the looped Webots gait from `test_27`.
+- **No action:** the controller lives inside `PGRLWalkingEnv`. Its `step()`
+  ignores the action and `act()` returns `None`.
+- **Same rules as PPO/SAC:** the env subclasses the PPO baseline env, so
+  warm-up, grace period, fall criteria and the time limit are identical. The
+  initial-pose perturbation is applied with the same
+  `make_evaluation_env_class()`.
+- **Same measurement as training:** `test_28` trains with this script's own
+  `run_episode()`, so the F_S optimised in training is the same F_S reported
+  here.
+- **Parameter ranges:** they changed after `pgrl_v1` (gains [−1, 1] →
+  [−3, 3]). The adapter reads each run's own ranges from its `config.json`.
+- **Base-gait row of Table 5-3:**
+  `--pgrl-initial --label PGRL_base` (gains 0, f = a = 1, stiffness 1).
+  `run_all_evaluations.sh` runs it automatically after `pgrl`.
