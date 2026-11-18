@@ -861,6 +861,54 @@ the policy can in principle earn reward while walking in a slow circle.
 If v3 shows that, add a heading-deviation penalty (e.g. on
 `1 - cos(yaw - yaw_spawn)`).
 
+## Looped reference gait (v3) — 2026-11-18
+
+**Problem.** `WebotsReferenceGait.get_targets()` played the 2.6 s Webots
+`Forwards.motion` clip **once**, then held its last frame for the rest of
+the 50 s episode (first noted in `test_27/NOTES.md`). Only the phase
+signal (sin/cos) kept cycling. After 2.6 s, every step therefore had to
+come from the ±0.25 rad (≈14°) residuals around a frozen pose. The policy
+was also given a clock saying "mid-stride" while the reference stood still.
+Report §4.3 describes a cycling gait, so the code did not match the report.
+
+**Change.** `webots_reference_gait.py` gains `loop=True` (the default, and
+explicit in the env). Targets come from the `test_27` looped clip
+(`experiments/test_27_gait_loop/data/looped_*.npy`: back-to-back copies
+of the same clip, one every 2.64 s = 2.60 s + one 40 ms frame step). It
+is wrapped in time with exactly the logic of `test_28`'s PGRL `LoopedGait`.
+SAC and PGRL now follow the **identical base gait**. The phase period is
+2.64 s, so the phase signal stays in sync with the targets. The loader
+refuses a looped file that doesn't start with the shared clip.
+- **Known seam:** at each copy boundary, the hip-roll / ankle-roll targets
+  jump ≈3.3°. It is deliberately not smoothed, to stay identical to PGRL.
+- **First 2.6 s unchanged:** the open-loop gait still falls at about 2 s,
+  so SAC must still learn to correct during the first stride.
+
+**Verification:**
+- Offline: the SAC targets equal an independent re-implementation of the
+  PGRL wrap logic (max diff 0.00000° over 48 s). The first 2.6 s are
+  identical to the old held version. The phase is 0 at t = 0 and 2.64 s,
+  and 0.5 at 1.32 s.
+- In Isaac Sim (`verify_gait_loop.py`, full 1500-step episode, zero
+  actions, fall termination disabled): **PASS**.
+  - L hip-pitch target range after t = 40 s: 37.6° (a held gait gives 0).
+  - Targets repeat exactly every 5 periods (396 steps; max diff 0.0000°).
+  - 18 phase wraps, in sync.
+  - No NaN/Inf across all seams.
+  - Height < 0.10 m at gait time 2.00 s, 0.415 m forward (`test_27`:
+    about 2.0 s, 0.41 m).
+
+**Caveat for analysis.** `sac_pilot_v3` changes two things at once: the
+quaternion fix (above) and the looped gait. If v3 walks, the run alone
+can't separate their contributions.
+
+**Evaluation results removed.** `test_evaluation_script/results/run_SAC.json`
+and `episodes_SAC.csv` evaluated the **v2 model** (4,995,000 steps) with
+the **v3 env file** (sha256 matched commit `f86b6a5`). That is an
+observation mismatch, and gave 100% falls and 0 m at every δ, so the
+files were deleted and `summary.csv`/`robustness.png` regenerated without
+SAC. Only v3 checkpoints are valid with the current env.
+
 ## Next steps
 
 - **Superseded by the quaternion fix above:** the v2 body-frame revision

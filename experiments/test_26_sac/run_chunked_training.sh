@@ -29,6 +29,8 @@
 # observation semantics change (projected gravity, ang vel, heading-frame
 # lin_vel), so this is again a FRESH start under a new run name;
 # runs/sac_pilot_v2/ (4,995,000 steps, v2 env) is left untouched.
+# v3 also LOOPS the reference gait for the whole episode (test_27 looped
+# clip, same as PGRL/test_28) instead of holding its last frame after 2.6 s.
 # The v2 notes below (MAX_WALLCLOCK comment) describe that previous run.
 RUN_NAME="sac_pilot_v3"
 MAX_WALLCLOCK_SECONDS=28800  # 8 hour batch. [v2 run] Previous 12h block (3,255,000
@@ -58,6 +60,13 @@ LR=3e-4
 ENT_COEF="auto"
 REST_SECONDS=2
 MIN_RAM_MB=4000
+CHUNK_TIMEOUT_SECONDS=1800   # per-chunk hard limit (a normal 15k-step chunk
+                             # takes ~10 min). Catches Isaac Sim HANGS, which
+                             # never exit on their own — e.g. the v1 run's
+                             # rtx.scenedb semaphore deadlock that stalled
+                             # ~5 h. The model/replay buffer are only saved at
+                             # the end of a chunk, so a killed chunk is simply
+                             # retried from the last good final_model.zip.
 
 mkdir -p "$RUN_DIR"
 
@@ -101,12 +110,19 @@ while [ "$completed_steps" -lt "$TOTAL_STEPS" ]; do
         fi
     fi
 
-    python train_sac.py --headless --timesteps "$this_chunk" --run-name "$RUN_NAME" \
+    # timeout: SIGTERM after CHUNK_TIMEOUT_SECONDS, SIGKILL 60 s later if the
+    # process ignores it. Exit code 124 (or 137 if SIGKILLed) = timed out.
+    timeout --kill-after=60 "$CHUNK_TIMEOUT_SECONDS" \
+        python train_sac.py --headless --timesteps "$this_chunk" --run-name "$RUN_NAME" \
         --urdf "$URDF" --checkpoint-freq "$CHUNK_STEPS" --lr "$LR" --ent-coef "$ENT_COEF" \
         $RESUME_FLAG --log-file "$LOG_FILE"
+    exit_code=$?
 
-    if [ $? -ne 0 ]; then
-        echo "  Chunk ${chunk_num} failed, retrying in 10s..." | tee -a "$LOG_FILE"
+    if [ "$exit_code" -ne 0 ]; then
+        if [ "$exit_code" -eq 124 ] || [ "$exit_code" -eq 137 ]; then
+            echo "  Chunk ${chunk_num} TIMED OUT after ${CHUNK_TIMEOUT_SECONDS}s (likely Isaac Sim hang)." | tee -a "$LOG_FILE"
+        fi
+        echo "  Chunk ${chunk_num} failed (exit ${exit_code}), retrying in 10s..." | tee -a "$LOG_FILE"
         sleep 10
         continue
     fi

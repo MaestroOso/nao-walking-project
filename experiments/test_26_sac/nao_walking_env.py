@@ -300,6 +300,8 @@ class NaoWalkingEnv(gym.Env):
             ramp_duration_s=0.2,         # tiny ramp — home and phase-0 are aligned
             amplitude_scale=1.0,         # full amplitude — no mismatch to soften
             lateral_only=gait_lateral_only,
+            loop=True,                   # cycle the clip for the whole episode
+                                         # (test_27 looped file, same as PGRL)
         )
         self._phase = 0.0
 
