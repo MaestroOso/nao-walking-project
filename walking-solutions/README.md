@@ -43,6 +43,9 @@ the same walking task (see `CLAUDE.md` phase 6). To add one:
    and, if it uses the reference gait, `../../shared/reference_gaits/`.
 3. Add a `README.md` in that folder documenting its config and results,
    following the pattern in `ppo/baseline_test24/README.md`.
+4. Add a `deployment.yaml` so the policy can run on the real robot (schema
+   and templates in `robot-integration/docs/deployment-contract.md`), and
+   check it with `python3 robot-integration/tools/validate_deployment.py`.
 
 ## Current contents
 

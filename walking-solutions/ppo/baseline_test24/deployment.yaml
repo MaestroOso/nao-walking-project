@@ -1,0 +1,94 @@
+# deployment.yaml — how this policy was trained, as data the robot side reproduces.
+# Schema: robot-integration/docs/deployment-contract.md (schema_version 1).
+# Every value below is copied from nao_walking_env.py in this folder; if the
+# env changes, this file must change with it.
+schema_version: 1
+name: ppo_baseline_test24
+algorithm: ppo
+description: >
+  PPO baseline promoted from experiments/test_24. Residual corrections on the
+  literal Webots Forwards.motion clip. Trained with the LEGACY quaternion
+  handling (Isaac's (w,x,y,z) read as (x,y,z,w)), so the robot side must
+  reproduce that distortion in the gravity and angular-velocity inputs.
+
+policy:
+  format: sb3
+  sb3_class: PPO
+  # Gitignored. Copy the checkpoint here or pass --model to the export tool.
+  model: runs/baseline_test24/final_model.zip
+
+control:
+  control_hz: 30            # control_dt = 1/30 s (physics 120 Hz, decimation 4)
+  warmup_steps: 60          # reference = home pose, phase signal = (0, 1)
+  max_episode_steps: 1500   # 50 s
+
+joints:
+  leg_order: [LHipYawPitch, LHipRoll, LHipPitch, LKneePitch, LAnklePitch, LAnkleRoll,
+              RHipYawPitch, RHipRoll, RHipPitch, RKneePitch, RAnklePitch, RAnkleRoll]
+  # NaoWalkingEnv.LEG_JOINT_LIMITS_DEG (knee lower limit raised to +2 deg, FIX 6)
+  limits_deg:
+    LHipYawPitch: [-65.6, 42.4]
+    LHipRoll:     [-21.7, 45.3]
+    LHipPitch:    [-88.0, 27.7]
+    LKneePitch:   [2.0, 121.0]
+    LAnklePitch:  [-68.1, 52.9]
+    LAnkleRoll:   [-22.8, 44.1]
+    RHipYawPitch: [-65.6, 42.4]
+    RHipRoll:     [-45.3, 21.7]
+    RHipPitch:    [-88.0, 27.7]
+    RKneePitch:   [2.0, 121.0]
+    RAnklePitch:  [-68.0, 53.4]
+    RAnkleRoll:   [-44.1, 22.8]
+  # WEBOTS_T0_POSE_DEG = first frame of Forwards.motion
+  home_pose_deg:
+    LHipYawPitch: 0.0
+    LHipRoll:     1.547
+    LHipPitch:    -28.935
+    LKneePitch:   59.702
+    LAnklePitch:  -30.768
+    LAnkleRoll:   -1.547
+    RHipYawPitch: 0.0
+    RHipRoll:     1.547
+    RHipPitch:    -28.935
+    RKneePitch:   59.702
+    RAnklePitch:  -30.768
+    RAnkleRoll:   -1.547
+  # NaoWalkingEnv.FIXED_JOINT_POSES_DEG (held by PD for the whole episode)
+  fixed_pose_deg:
+    HeadYaw: 0
+    HeadPitch: 0
+    LShoulderPitch: 84
+    LShoulderRoll: 10
+    LElbowYaw: -70
+    LElbowRoll: -25
+    LWristYaw: 0
+    LHand: 0
+    RShoulderPitch: 84
+    RShoulderRoll: -10
+    RElbowYaw: 70
+    RElbowRoll: 25
+    RWristYaw: 0
+    RHand: 0
+
+reference_gait:
+  keyframes:   ../../shared/reference_gaits/forwards_keyframes.npy
+  timestamps:  ../../shared/reference_gaits/forwards_timestamps.npy
+  joint_names: ../../shared/reference_gaits/forwards_joint_names.txt
+  after_end: hold_last      # WebotsReferenceGait clamps to the last frame after 2.6 s
+  phase_period_s: null      # null = last timestamp (2.6 s), as in WebotsReferenceGait
+
+action:
+  type: residual_on_gait    # q* = clip(q_ref(t) + scale_rad * clip(a, -1, 1), limits)
+  scale_rad: 0.25
+
+observation:
+  quaternion_convention: legacy_xyzw
+  spawn_yaw_deg: 180        # spawn quaternion [0,0,0,1] read by Isaac as (w,x,y,z): robot faces world -x
+  nonfinite_to_zero: true
+  components:
+    - {name: projected_gravity,   dim: 3}
+    - {name: angular_velocity,    dim: 3, scale: 0.25}
+    - {name: linear_velocity,     dim: 2, frame: world_xy}
+    - {name: leg_joint_positions, dim: 12, normalization: limits_to_unit}
+    - {name: base_height,         dim: 1}
+    - {name: gait_phase,          dim: 2, warmup_value: [0.0, 1.0]}
