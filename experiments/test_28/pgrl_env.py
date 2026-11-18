@@ -104,8 +104,11 @@ class PGRLWalkingEnv(NaoWalkingEnv):
 
     # ── parameters ──────────────────────────────────────────────────────────
     def set_params(self, theta=None, phys=None):
-        """Set the policy from normalised `theta` or physical `phys` values.
-        Takes effect on the next reset() (stiffness is applied there)."""
+        """Set the policy from physical `phys` values (preferred) or from a
+        normalised `theta` interpreted with the CURRENT ranges in
+        pgrl_params.PARAM_SPECS. Callers working with a specific run must pass
+        phys = to_physical(theta, that run's specs). Takes effect on the next
+        reset() (stiffness is applied there)."""
         if phys is None:
             phys = P.to_physical(theta if theta is not None else P.initial_theta())
         self._phys = np.asarray(phys, dtype=np.float64).copy()

@@ -115,16 +115,18 @@ def main():
     if state_path.exists():
         state = json.loads(state_path.read_text())
         theta = np.array(state["theta"])
+        specs = P.load_run_specs(run_dir)        # ranges this run was trained with
         rng = np.random.default_rng()
         rng.bit_generator.state = state["rng_state"]
         print(f"[pgrl] RESUME {args.run_name}: iteration {state['iteration']}, "
               f"{state['evals']} evals")
     else:
-        theta = P.initial_theta()
+        specs = P.PARAM_SPECS
+        theta = P.initial_theta(specs)
         rng = np.random.default_rng(args.seed)
         state = {"iteration": 0, "evals": 0}
         (run_dir / "config.json").write_text(json.dumps({
-            **vars(args), "param_specs": P.PARAM_SPECS,
+            **vars(args), "param_specs": specs,
             "theta_init": theta.tolist(), "delta_deg": 0.0,
             "compensator": "torso tilt (projected gravity g_x, g_y)",
             "base_gait": "experiments/test_27_gait_loop/data (looped Webots Forwards.motion)",
@@ -150,12 +152,12 @@ def main():
         scores, falls, succ = np.zeros(args.policies), 0, 0
         for k in range(args.policies):
             cand = np.clip(theta + deltas[k], 0.0, 1.0)
-            res = evaluate_theta(env, theta=cand, distance_m=args.distance)
+            res = evaluate_theta(env, phys=P.to_physical(cand, specs), distance_m=args.distance)
             os.chdir(cwd)
             scores[k] = res["fs"]
             falls += int(res["fell"])
             succ += int(res["success"])
-            phys = P.to_physical(cand)
+            phys = P.to_physical(cand, specs)
             append_csv(run_dir / "evaluations.csv", EVAL_FIELDS, {
                 "iteration": it, "k": k, "eval_index": state["evals"] + k + 1,
                 **{f"d_{n}": float(d) for n, d in zip(P.NAMES, deltas[k])},
@@ -174,7 +176,7 @@ def main():
             "iteration": it, "evals_cum": state["evals"],
             "fs_mean": scores.mean(), "fs_max": scores.max(), "fs_min": scores.min(),
             "n_falls": falls, "n_success": succ, "wall_time_s": time.time() - t_it,
-            **P.as_dict(theta),
+            **P.as_dict(theta, specs),
         })
         state["theta"] = theta.tolist()
         state["rng_state"] = rng.bit_generator.state
@@ -182,7 +184,7 @@ def main():
         print(f"[pgrl] it {it}: F_S mean {scores.mean():+.4f} max {scores.max():+.4f} "
               f"falls {falls}/{args.policies}  evals {state['evals']}  "
               f"|A|max {np.abs(A).max():.4f}  ({time.time() - t_it:.0f}s)")
-        print("       θ = " + ", ".join(f"{n}={v:.3f}" for n, v in P.as_dict(theta).items()))
+        print("       θ = " + ", ".join(f"{n}={v:.3f}" for n, v in P.as_dict(theta, specs).items()))
 
     env.close()   # hard-exits the process; everything is already on disk
 
