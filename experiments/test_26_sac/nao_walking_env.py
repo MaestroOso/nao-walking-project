@@ -256,6 +256,8 @@ class NaoWalkingEnv(gym.Env):
         reward_forward_vel=5.0,
         reward_alive=1.0,
         penalty_orientation=0.5,
+        penalty_fall=100.0,      # v5: one-off penalty on the step the episode
+                                 # TERMINATES (fall), never on truncation (time limit)
         penalty_lateral_vel=0.5,
         penalty_yaw_rate=0.5,
         alive_scale=500.0,
@@ -290,6 +292,7 @@ class NaoWalkingEnv(gym.Env):
         self.w_forward      = reward_forward_vel
         self.w_alive        = reward_alive
         self.w_orient       = penalty_orientation
+        self.w_fall         = penalty_fall
         self.w_lateral      = penalty_lateral_vel
         self.w_yaw          = penalty_yaw_rate
         self.alive_scale    = alive_scale
@@ -703,6 +706,14 @@ class NaoWalkingEnv(gym.Env):
         reward     = self._compute_reward(action)
         terminated = self._check_termination()
         truncated  = self._step_count >= self.max_episode_steps
+
+        # v5: one-off fall penalty (see APPROACH.md "Fall penalty"). The v4
+        # policy traded ~0.9 s of survival for ~0.24 m of extra lunge distance
+        # because ending the episode cost nothing. `terminated` is only True
+        # for a real fall (height / orientation / NaN), never for the time
+        # limit, so reaching max_episode_steps is not penalized.
+        if terminated:
+            reward -= self.w_fall
 
         self._prev_action = action.copy()
         _, quat = self._nao.get_world_pose()

@@ -946,6 +946,79 @@ grace period, obs). Fresh run `runs/sac_pilot_v4/` (8 h); v3 left
 untouched. Note that v3 models evaluated with the v4 env behave slightly
 differently during warmup (their warmup actions are now ignored).
 
+## sac_pilot_v4 outcome and fall penalty (v5) — 2026-11-18
+
+**v4 run (8 h, 0 → 720,000 steps, 48 chunks, no failed chunk).** Training
+mean episode length plateaued at ~95 steps (60 of which are the masked
+warmup stand) from ~225k steps; mean reward kept rising (57 → 192).
+Warmup roll is now 0.1° in every episode (fix confirmed).
+
+| Policy (headless, deterministic unless noted) | Gait time to fall | Distance | Reward |
+|---|---|---|---|
+| Zero action (reference gait only) | 2.00 s | 0.415 m | 161 |
+| v4 deterministic | 1.10 s | 0.654 m | 181 |
+| v4 stochastic (5 eps) | 1.07–1.33 s | 0.74–0.93 m | 160–227 |
+| v4 deterministic, GUI (10 identical eps) | 0.70 s | 0.734 m | 124 |
+
+Visually: still during warmup; then a few steps, the left leg barely
+lifts, and the robot hops sideways and falls. Action saturation rose to
+~48 % (v3: 9 %), with large constant offsets (LHipPitch +12.1°,
+LHipRoll −12.9°, LHipYawPitch +10.1°).
+
+**Diagnosis — reward favours lunging.** Per unit: 1 m forward = 150
+reward (5·v at 30 Hz); 1 s alive ≈ 33; lying fully tilted costs only
+0.5/step; a fall itself costs nothing. v4 traded ~0.9 s of survival
+(≈ −31) for +0.24 m (≈ +36) and came out ahead.
+
+**Change (v5):** one-off `penalty_fall = 100` subtracted on the step the
+episode *terminates* (fall: height < 0.10 m, flip, NaN). Truncation at
+the 1500-step limit is not penalized. Discounted with γ = 0.99 it is felt
+as ~90 / 74 / 37 when the fall is 10 / 30 / 100 steps ahead, i.e. it
+mainly shapes the last 1–3 s before a fall. A raised tilt weight (2.0)
+was considered and deliberately **not** applied, so v5 differs from v4 in
+this single term. Fresh run `runs/sac_pilot_v5/` (12 h batch).
+
+## sac_pilot_v5 outcome — 2026-11-19
+
+**Run:** 12 h, 0 → 1,230,000 steps, no failed chunk. First SAC policy in
+this project that does not fall. Breakthrough at ~300–500k steps:
+
+| Steps | Mean ep length | Eps reaching 1500 | Mean reward |
+|---|---|---|---|
+| 0–100k | 94 | 0 | −42 |
+| 200–300k | 131 | 0 | 93 |
+| 300–400k | 281 | 0 (max 1262) | 282 |
+| 400–500k | 839 | 26 / 118 | 1544 |
+| 700–800k | 1239 | 51 / 80 | 2896 |
+| 1.0–1.1M | 1305 | 49 / 77 | 3099 |
+
+**Headless eval of `final_model.zip`** (48 s of gait per episode):
+
+| Policy | Outcome | Forward | Lateral | Speed | Heading change | \|roll\| mean / max |
+|---|---|---|---|---|---|---|
+| Deterministic | 1500 steps | +3.00 m | −0.74 m | 0.064 m/s | −34° | 4.4° / 13.2° |
+| Stochastic ep 1 | 1500 steps | +2.95 m | −0.70 m | 0.063 m/s | +34° | 4.5° / 14.3° |
+| Stochastic ep 2 | fell at 39 s | +0.79 m | −2.13 m | 0.058 m/s | +148° | 4.9° / 15.0° |
+| Stochastic ep 3 | 1500 steps | +2.96 m | −1.09 m | 0.066 m/s | +39° | 4.7° / 14.9° |
+
+**GUI eval** (3 identical deterministic episodes): fell at step 225
+(5.5 s of gait), 0.64 m, 0.086 m/s — the largest GUI-vs-headless gap seen
+so far, i.e. the balance is fragile to tiny physics differences. Visually:
+very small shuffling steps (no clear foot lift), then a slow ~90°
+clockwise turn and a sideways fall. Warmup stand is still.
+
+**Diagnosis.**
+1. *Shuffling* — the alive bonus `1 + step/500` reaches 4/step, so a full
+   episode earns ≈ 3,750 for survival vs ≈ 450 for 3 m of travel; with
+   falls now costing 100, minimal leg motion is optimal.
+2. *Turning* — forward velocity is measured in the robot's heading frame
+   (v3), so walking in a turned direction earns full forward reward; the
+   only counter-term is `−0.5·ω_yaw²`, which a slow steady turn makes
+   negligible. Nothing references the initial direction.
+
+Lopsided offsets persist (LHipRoll +12.7°, LAnkleRoll −7.5°; ~35 % of
+action components saturated).
+
 ## Next steps
 
 - **Superseded by the quaternion fix above:** the v2 body-frame revision

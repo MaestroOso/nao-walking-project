@@ -40,8 +40,16 @@
 # everything else is identical to v3. FRESH start: v3's replay buffer holds
 # warmup transitions whose actions moved the robot, which is no longer true.
 # runs/sac_pilot_v3/ is left untouched.
-RUN_NAME="sac_pilot_v4"
-MAX_WALLCLOCK_SECONDS=28800  # 8 hour batch. [v2 run] Previous 12h block (3,255,000
+#
+# v5: FALL PENALTY (see APPROACH.md "Fall penalty"). sac_pilot_v4 (720,000
+# steps, 8 h) learned to lunge: it fell after ~1.1 s of gait vs 2.0 s for
+# the zero-action reference, but scored more because the extra distance
+# outweighed the lost alive reward and falling itself cost nothing. v5 adds
+# a one-off -100 reward on the falling step (env penalty_fall=100); every
+# other setting is identical to v4 (tilt weight still 0.5). FRESH start:
+# v4's replay buffer stores rewards without the penalty.
+RUN_NAME="sac_pilot_v5"
+MAX_WALLCLOCK_SECONDS=43200  # 12 hour batch (v5; v3/v4 used 8 h). [v2 run] Previous 12h block (3,255,000
                              # -> 4,290,000 steps) raised training-time
                              # ep_len_mean 76->84 and ep_rew_mean 287->315,
                              # but the DETERMINISTIC checkpoint eval was
