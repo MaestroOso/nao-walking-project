@@ -250,6 +250,8 @@ class NaoWalkingEnv(gym.Env):
         finger_kd=10.0,
         gait_hz=0.2,
         gait_warmup_steps=60,
+        warmup_actions=False,    # v4: False = residual actions ignored during
+                                 # the warmup stand (v3 and earlier: True)
         gait_lateral_only=False,
         reward_forward_vel=5.0,
         reward_alive=1.0,
@@ -282,6 +284,7 @@ class NaoWalkingEnv(gym.Env):
         self.finger_kd         = finger_kd
         self.gait_hz           = gait_hz
         self.gait_warmup_steps = gait_warmup_steps
+        self.warmup_actions    = warmup_actions
         self.gait_lateral_only = gait_lateral_only
 
         self.w_forward      = reward_forward_vel
@@ -668,6 +671,13 @@ class NaoWalkingEnv(gym.Env):
         if self._step_count < self.gait_warmup_steps:
             gait_target = self._leg_home.copy()
             self._phase = 0.0
+            # v4: during the warmup stand the robot holds the home pose
+            # exactly. The v3 policy used these 2 s to lean the robot ~6-8 deg
+            # sideways before the gait even started (see APPROACH.md
+            # "Warmup action masking"). The policy still observes and
+            # outputs actions here; they just have no effect on the robot.
+            if not self.warmup_actions:
+                action = np.zeros_like(action)
         else:
             t = (self._step_count - self.gait_warmup_steps) * self.control_dt
             self._phase = self._gait.get_phase(t)

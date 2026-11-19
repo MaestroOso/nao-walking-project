@@ -161,7 +161,9 @@ with open(os.path.join(run_dir, "config.txt"), "w") as f:
             "(scale=0.25rad), obs=23. Env v3 — DIFFERS from test_24: quaternion "
             "read as (w,x,y,z) (fixes roll-invisible projected gravity), "
             "heading-frame lin_vel in obs + reward, yaw-rate penalty w=0.5 "
-            "(see APPROACH.md 'Quaternion convention fix')\n")
+            "(see APPROACH.md 'Quaternion convention fix'). Env v4: residual "
+            f"actions ignored during the {env.unwrapped.gait_warmup_steps}-step warmup "
+            f"stand (warmup_actions={env.unwrapped.warmup_actions})\n")
     f.write(f"SAC (SB3 2.7.1 defaults except net_arch/gamma matched to test_24): "
             f"lr={args.lr}, net_arch=[128,128], buffer_size=1_000_000, "
             f"learning_starts=100, batch_size=256, tau=0.005, gamma=0.99, "

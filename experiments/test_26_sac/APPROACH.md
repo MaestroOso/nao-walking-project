@@ -909,6 +909,43 @@ observation mismatch, and gave 100% falls and 0 m at every δ, so the
 files were deleted and `summary.csv`/`robustness.png` regenerated without
 SAC. Only v3 checkpoints are valid with the current env.
 
+## sac_pilot_v3 outcome and warmup action masking (v4) — 2026-11-18
+
+**v3 run (8 h, 0 → 675,000 steps, 45 chunks, no failed/timed-out chunk).**
+Training-time mean episode length rose 55 → ~80 steps by ~300k steps,
+then plateaued (~78 steps); no episode came close to 1500 (max 142).
+Deterministic eval of `final_model.zip`:
+
+| Mode | Steps | Distance | Outcome |
+|---|---|---|---|
+| GUI (`evaluate_policy.py --slow`, 10 eps) | 51 (all identical) | 0.607 m | fell, h = 0.066 m |
+| Headless (action-logging diagnostic, 1 ep) | 105 | — | fell after gait start |
+
+The GUI vs headless difference (same model, same spawn) matches the
+discrepancy already noted for PGRL; training is headless, so headless is
+the representative number. Visually (GUI): the robot attempts steps, but
+one leg moves more than the other and it tips to one side.
+
+**Action-usage diagnostic** (1 deterministic + 5 stochastic episodes,
+headless). Residual range is ±0.25 rad (±14.3°) per leg joint; joint
+limits clipped the target in only 0–2 % of steps; overall saturation
+(|a| > 0.9) was 9 % (deterministic) / 15 % (stochastic). But the policy
+holds **constant offsets** on a few joints rather than making corrections:
+LHipRoll −7.2°, RHipPitch −7.4°, LHipYawPitch +4.3° (mean), with |a| > 0.5
+on 70–90 % of steps — an asymmetric gait by construction. Roll was already
++5–8° during the 60-step **warmup stand** (before the reference gait
+starts), i.e. the policy uses the warmup to lean the robot. Also found:
+RHipYawPitch is a URDF mimic of LHipYawPitch (actual R follows L within
+0.6°, up to 22° off its own command), so that action output has no effect.
+
+**Change (v4):** `NaoWalkingEnv(warmup_actions=False)` (new default) zeroes
+the residual action during warmup, so the robot holds the home pose exactly
+until the gait starts. The policy still observes and outputs actions there;
+only their effect is removed. Nothing else changed (action scale, reward,
+grace period, obs). Fresh run `runs/sac_pilot_v4/` (8 h); v3 left
+untouched. Note that v3 models evaluated with the v4 env behave slightly
+differently during warmup (their warmup actions are now ignored).
+
 ## Next steps
 
 - **Superseded by the quaternion fix above:** the v2 body-frame revision

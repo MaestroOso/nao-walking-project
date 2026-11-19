@@ -32,7 +32,15 @@
 # v3 also LOOPS the reference gait for the whole episode (test_27 looped
 # clip, same as PGRL/test_28) instead of holding its last frame after 2.6 s.
 # The v2 notes below (MAX_WALLCLOCK comment) describe that previous run.
-RUN_NAME="sac_pilot_v3"
+#
+# v4: WARMUP ACTION MASKING (see APPROACH.md "Warmup action masking").
+# sac_pilot_v3 (675,000 steps, 8 h) used its residual actions during the
+# 60-step warmup stand to lean the robot 6-8 deg sideways before the gait
+# started. v4 ignores actions during warmup (env warmup_actions=False);
+# everything else is identical to v3. FRESH start: v3's replay buffer holds
+# warmup transitions whose actions moved the robot, which is no longer true.
+# runs/sac_pilot_v3/ is left untouched.
+RUN_NAME="sac_pilot_v4"
 MAX_WALLCLOCK_SECONDS=28800  # 8 hour batch. [v2 run] Previous 12h block (3,255,000
                              # -> 4,290,000 steps) raised training-time
                              # ep_len_mean 76->84 and ep_rew_mean 287->315,
