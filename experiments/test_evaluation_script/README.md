@@ -60,7 +60,7 @@ DISTANCE=1.5 ./run_all_evaluations.sh --overwrite
 
 # A single algorithm / custom checkpoint
 python evaluate_algorithms.py --algo sac --distance 1.0
-python evaluate_algorithms.py --algo sac --model ../test_26_sac/runs/sac_pilot_v3/ckpt_<N>_steps.zip --label SAC_<N>
+python evaluate_algorithms.py --algo sac --model ../../walking-solutions/sac/baseline_test26/runs/sac_pilot_v5/ckpt_<N>_steps.zip --label SAC_<N>
 python evaluate_algorithms.py --algo ppo --deltas 0 --repetitions 3 --gui    # watch it
 python evaluate_algorithms.py --algo pgrl                                     # pgrl/baseline_test28, pgrl_v1
 python evaluate_algorithms.py --algo pgrl --model ../../walking-solutions/pgrl/baseline_test28/runs/<run> --label PGRL_<run>
@@ -76,7 +76,7 @@ Default models (latest version of each algorithm, overridable with `--model` / `
 | `--algo` | Model | Environment (`nao_walking_env.py` folder) |
 |---|---|---|
 | `ppo` | `~/nao_walking_project/experiments/test_24/runs/test24/final_model.zip` (27.2M steps, outside the repo; see "PPO model choice") | `walking-solutions/ppo/baseline_test24/` |
-| `sac` | `experiments/test_26_sac/runs/sac_pilot_v3/final_model.zip` (env v3; only v3 checkpoints are valid with the current `test_26_sac` env — v1/v2 models get mismatched observations) | `experiments/test_26_sac/` |
+| `sac` | `walking-solutions/sac/baseline_test26/runs/sac_pilot_v5/final_model.zip` (gitignored, copy it from `experiments/test_26_sac/runs/`; only v5 checkpoints match this env) | `walking-solutions/sac/baseline_test26/` |
 | `pgrl` | `walking-solutions/pgrl/baseline_test28/runs/pgrl_v1` (θ from `state.json`, mapped with that run's ranges from `config.json`; run folder is gitignored, copy it from `experiments/test_28/runs/`). `--pgrl-initial` uses the initial parameters instead (label it `PGRL_base`) | `walking-solutions/pgrl/baseline_test28/` |
 
 The script changes into the env folder before creating the env, because the

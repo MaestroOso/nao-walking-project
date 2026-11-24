@@ -42,6 +42,7 @@ radians.
 | `policy.run_dir` | PGRL run folder with `state.json` + `config.json` (pgrl only) |
 | `control.control_hz` | Policy rate (30 Hz in all current envs) |
 | `control.warmup_steps` | Steps holding the home pose before the gait starts |
+| `control.warmup_actions` | Optional, default `true`. `false`: the residual action is ignored during warm-up (q* = warm-up pose), as in SAC since `sac_pilot_v4`. PPO trained with `true` |
 | `control.max_episode_steps` | Episode limit (also the evaluation limit) |
 | `joints.leg_order` | The 12 leg joints in policy order (action and observation) |
 | `joints.limits_deg` | `[lower, upper]` per leg joint, as used for clipping and normalisation |
@@ -91,6 +92,7 @@ SAC (differences from the PPO file only):
 ```yaml
 algorithm: sac
 policy: {format: sb3, sb3_class: SAC, model: runs/<run>/final_model.zip}
+control: {warmup_actions: false}      # sac_pilot_v4 and later; v3 and earlier: true
 observation:
   quaternion_convention: wxyz
   components:

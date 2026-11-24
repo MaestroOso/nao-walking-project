@@ -1,7 +1,7 @@
 """Shared test helpers.
 
 The fidelity tests load the REAL training environments from the repo
-(walking-solutions/ppo/baseline_test24, experiments/test_26_sac,
+(walking-solutions/ppo/baseline_test24, walking-solutions/sac/baseline_test26,
 walking-solutions/pgrl/baseline_test28) and drive them with a fake simulator object, so the
 robot-side code is compared against the code the policies were trained with.
 No Isaac Sim is needed: the envs only create the simulator in reset().
@@ -21,10 +21,11 @@ REPO_ROOT = ROBOT_DIR.parent
 sys.path.insert(0, str(PKG_DIR))
 
 PPO_DIR = REPO_ROOT / "walking-solutions/ppo/baseline_test24"
-SAC_DIR = REPO_ROOT / "experiments/test_26_sac"
+SAC_DIR = REPO_ROOT / "walking-solutions/sac/baseline_test26"
 PGRL_DIR = REPO_ROOT / "walking-solutions/pgrl/baseline_test28"
 URDF = REPO_ROOT / "walking-solutions/shared/robot/nao.urdf"
 PPO_YAML = PPO_DIR / "deployment.yaml"
+SAC_YAML = SAC_DIR / "deployment.yaml"
 sys.dont_write_bytecode = True     # keep the training folders free of __pycache__
 
 
@@ -176,11 +177,11 @@ def spec_dict():
 
 
 def sac_spec_dict():
-    d = spec_dict()
-    d.update(name="sac_test", algorithm="sac")
-    d["policy"]["sb3_class"] = "SAC"
-    d["observation"]["quaternion_convention"] = "wxyz"
-    d["observation"]["components"][2]["frame"] = "heading"
+    """The SAC baseline deployment.yaml as a dict, with absolute gait paths."""
+    import yaml
+    d = yaml.safe_load(SAC_YAML.read_text())
+    for k in ("keyframes", "timestamps", "joint_names"):
+        d["reference_gait"][k] = str((SAC_DIR / d["reference_gait"][k]).resolve())
     return d
 
 

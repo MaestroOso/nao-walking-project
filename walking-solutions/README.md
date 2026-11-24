@@ -31,7 +31,7 @@ walking-solutions/
     by the PPO baseline. Regeneratable via
     `nao_walking_project/webots/extract_forward_motion.py` if needed.
   - `forwards_looped_*`: the same clip tiled to 52.76 s, used as the base
-    gait by the PGRL baseline. Regenerate with
+    gait by the PGRL and SAC baselines. Regenerate with
     `pgrl/baseline_test28/build_looped_gait.py`.
 
 Every algorithm/variant folder references these via `../../shared/...`
@@ -61,3 +61,8 @@ the same walking task (see `CLAUDE.md` phase 6). To add one:
   looped Webots gait), run `pgrl_v1`, promoted from `experiments/test_28`.
   Self-contained: it carries its own copies of the PPO env and of the
   evaluation episode/metric code.
+- [`sac/baseline_test26/`](sac/baseline_test26/README.md) — SAC (residual
+  corrections on the looped Webots gait, fall penalty), run `sac_pilot_v5`
+  (1.23M steps), promoted from `experiments/test_26_sac`. Stays upright and
+  completes the 1 m course headless, but walks slowly (~0.06 m/s), turns
+  and is fragile (falls after 5.5 s in the GUI).

@@ -68,8 +68,11 @@ code alone), the latter is what you'd actually run or build on today.
   looped Webots gait, promoted from `test_28` (run `pgrl_v1`). Lives at
   `walking-solutions/pgrl/baseline_test28/`. It improves the score but still
   falls after two steps.
-- **Next:** promote SAC (still in `experiments/test_26_sac`) to
-  `walking-solutions/sac/`, then run the common evaluation
+- **SAC:** residual corrections on the looped Webots gait with a fall
+  penalty, promoted from `test_26_sac` (run `sac_pilot_v5`). Lives at
+  `walking-solutions/sac/baseline_test26/`. It stays upright and completes
+  the 1 m course headless, but walks slowly and turns.
+- **Next:** run the common evaluation
   (`experiments/test_evaluation_script/`) for PPO, SAC and PGRL (see
   `CLAUDE.md` phase 6).
 - A separate, unvalidated refactor toward a modular multi-robot training

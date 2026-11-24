@@ -5,6 +5,7 @@ controller.py — per-step joint targets, reproducing the training envs.
 
     obs   = observation(state, phase signal of the PREVIOUS step)
     a     = clip(policy(obs), -1, 1)                 # also during warm-up
+    a     = 0  during warm-up if control.warmup_actions is false (SAC)
     n    += 1
     q_ref = warm-up pose            if n < warmup_steps
             gait(t), t = (n - warmup_steps)·dt       otherwise
@@ -110,6 +111,8 @@ class ResidualController(_Controller):
         t = self._advance()
         if t is None:
             ref = self.warmup_pose
+            if not self.spec.warmup_actions:     # training env ignored it here
+                action = np.zeros_like(action)
         else:
             self.phase = self.gait.phase(t)
             ref = self.gait.targets(t)

@@ -137,7 +137,11 @@ _Update this section at the end of every session._
   target. Reward formula and full config documented in that folder's
   `README.md`.
 - **Phase 6 (Algorithm Experimentation & Analysis):** in progress.
-  SAC (`experiments/test_26_sac/`, run `sac_pilot_v2`) is still training.
+  SAC is promoted to `walking-solutions/sac/baseline_test26/` (run
+  `sac_pilot_v5`, 1.23M steps: stays upright headless, ~0.06 m/s, turns,
+  fragile in the GUI). A v6 attempt (constant alive bonus, yaw-rate
+  penalty 5.0) is uncommitted in `experiments/test_26_sac`; its run
+  `sac_pilot_v6` stopped at 225k steps and can be resumed.
   PGRL is implemented and promoted to `walking-solutions/pgrl/baseline_test28/`
   (developed in `experiments/test_27_gait_loop` + `experiments/test_28`,
   run `pgrl_v1`: F_S 0.043 → 0.078, still falls after two steps). A common
@@ -158,11 +162,11 @@ _Update this section at the end of every session._
   policies to the real NAO over ROS 2 Jazzy (`naoqi_driver2` for the
   30 Hz joint stream, a direct `qi` session for stiffness, posture, rest
   and e-stop). Each `walking-solutions/<algo>/<variant>/` needs a
-  `deployment.yaml` (written for `ppo/baseline_test24` and
-  `pgrl/baseline_test28`). The tools,
-  runtime, ROS node and docs are done and tested. Still pending: the final
-  SAC folder with its `deployment.yaml`, the exports (run
-  `export/export_policy.py`), and the runs on the robot. Procedure:
+  `deployment.yaml` (written for `ppo/baseline_test24`,
+  `pgrl/baseline_test28` and `sac/baseline_test26`). The tools,
+  runtime, ROS node and docs are done and tested. Still pending: the
+  exports for the final versions (run `export/export_policy.py`) and the
+  runs on the robot. Procedure:
   `robot-integration/docs/deployment-procedure.md`.
 - **PGRL promotion (23 Nov 2026):** `walking-solutions/pgrl/baseline_test28/`
   is self-contained: it has its own copies of the PPO env, of the evaluation
@@ -172,7 +176,18 @@ _Update this section at the end of every session._
   there. `runs/` stays gitignored; copy `experiments/test_28/runs/pgrl_v1`
   into it. Checked from the new folder: same headless result (d 0.531 m,
   F_S 0.0813) and the first training iteration reproduces bit-for-bit.
-- **Next step:** promote SAC to `walking-solutions/sac/`, run the common
+- **SAC promotion (23 Nov 2026):** `walking-solutions/sac/baseline_test26/`
+  holds the `experiments/test_26_sac` code at commit `f29cb8a` (run
+  `sac_pilot_v5`), with paths pointed at `shared/`. Checked from the new
+  folder: same headless result (1500 steps, reward 4037.6), both verify
+  scripts pass, the export matches SB3 (1.4e-5), and the common evaluation
+  completes the 1 m course (F_S 0.0664, 1 repetition). New optional contract
+  field `control.warmup_actions` (SAC: `false`), because the robot runtime
+  applied the action during warm-up and SAC v5 was trained with it ignored;
+  the fidelity test caught this. The evaluation script default and the
+  robot-integration tests point to the new folder. `runs/` stays gitignored;
+  copy `experiments/test_26_sac/runs/sac_pilot_v5` into it.
+- **Next step:** run the common
   evaluation for PPO, SAC and PGRL (`run_all_evaluations.sh`), and fill
   chapter 5 of the report.
 

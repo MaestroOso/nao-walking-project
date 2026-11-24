@@ -160,6 +160,9 @@ class DeploymentSpec:
     observation: Optional[ObservationSpec]  # sb3 only
     pgrl: Optional[PGRLSpec]          # pgrl only
     warnings: Tuple[str, ...] = ()
+    # False: the residual action is ignored during warm-up (SAC since
+    # sac_pilot_v4, env warmup_actions=False). Optional, default True (PPO).
+    warmup_actions: bool = True
 
     @property
     def control_dt(self) -> float:
@@ -310,6 +313,7 @@ def load_deployment(path, require_artifacts: bool = False) -> DeploymentSpec:
     # ── control ──
     ctl = raw.get("control")
     control_hz = warmup = max_steps = None
+    warmup_actions = True
     if not isinstance(ctl, dict):
         c.err("root: missing required section 'control'")
     else:
@@ -322,6 +326,11 @@ def load_deployment(path, require_artifacts: bool = False) -> DeploymentSpec:
             c.err("control.warmup_steps must be >= 0")
         if max_steps is not None and warmup is not None and max_steps <= warmup:
             c.err("control.max_episode_steps must be > warmup_steps")
+        if "warmup_actions" in ctl:
+            if isinstance(ctl["warmup_actions"], bool):
+                warmup_actions = ctl["warmup_actions"]
+            else:
+                c.err("control.warmup_actions must be true or false")
 
     # ── joints ──
     jn = raw.get("joints")
@@ -485,6 +494,7 @@ def load_deployment(path, require_artifacts: bool = False) -> DeploymentSpec:
         max_episode_steps=max_steps, leg_order=leg_order, limits_rad=limits,
         home_pose_rad=home, fixed_pose_rad=fixed, gait=gait, action=action,
         observation=observation, pgrl=pgrl, warnings=tuple(c.warnings),
+        warmup_actions=warmup_actions,
     )
 
 

@@ -78,12 +78,13 @@ ALGO_DEFAULTS = {
         "env_dir": REPO_ROOT / "walking-solutions/ppo/baseline_test24",
     },
     "sac": {
-        # Latest SAC run: sac_pilot_v3 (env v3: quaternion fix, heading-frame
-        # velocity, looped gait). Older runs (sac_pilot, sac_pilot_v2) were
-        # trained on an earlier env and must NOT be evaluated with the current
-        # test_26_sac env — their observations no longer match.
-        "model": REPO_ROOT / "experiments/test_26_sac/runs/sac_pilot_v3/final_model.zip",
-        "env_dir": REPO_ROOT / "experiments/test_26_sac",
+        # Promoted SAC solution, run sac_pilot_v5 (1.23M steps; env v5:
+        # quaternion fix, heading-frame velocity, looped gait, warm-up actions
+        # ignored, fall penalty). runs/ is gitignored: copy it from
+        # experiments/test_26_sac/runs/sac_pilot_v5 (see the SAC folder
+        # README.md). Older SAC runs (v1-v4) were trained on other envs.
+        "model": REPO_ROOT / "walking-solutions/sac/baseline_test26/runs/sac_pilot_v5/final_model.zip",
+        "env_dir": REPO_ROOT / "walking-solutions/sac/baseline_test26",
     },
     "pgrl": {
         # Promoted PGRL solution, run pgrl_v1 (166 iterations, 1992 evaluations,
