@@ -1,0 +1,12 @@
+LHipYawPitch
+LHipRoll
+LHipPitch
+LKneePitch
+LAnklePitch
+LAnkleRoll
+RHipYawPitch
+RHipRoll
+RHipPitch
+RKneePitch
+RAnklePitch
+RAnkleRoll

@@ -1,0 +1,85 @@
+# deployment.yaml — how this policy was trained, as data the robot side reproduces.
+# Schema: robot-integration/docs/deployment-contract.md (schema_version 1).
+# Control, joint limits, home pose and fixed pose are copied from
+# nao_walking_env.py in this folder (a verbatim copy of the PPO baseline env);
+# the controller is pgrl_env.PGRLWalkingEnv.compute_leg_targets(). If either
+# changes, this file must change with it.
+schema_version: 1
+name: pgrl_baseline_test28
+algorithm: pgrl
+description: >
+  PGRL (finite-difference policy search, Kohl & Stone) promoted from
+  experiments/test_28, run pgrl_v1 (166 iterations, 1992 evaluations, gain
+  ranges [-1, 1] stored in the run's config.json). 12 parameters: torso-tilt
+  compensator gains (both legs), gait frequency and amplitude factors, and six
+  leg stiffness factors, applied to the looped Webots Forwards.motion clip.
+  The tilt uses the correct (w,x,y,z) quaternion convention. In simulation
+  the policy takes two steps and then falls (it learned to fall forward).
+
+policy:
+  format: pgrl_run
+  # Gitignored (runs/). Copy experiments/test_28/runs/pgrl_v1 here, see README.md.
+  run_dir: runs/pgrl_v1
+
+control:
+  control_hz: 30            # control_dt = 1/30 s (physics 120 Hz, decimation 4)
+  warmup_steps: 60          # leg targets = home pose, compensator off
+  max_episode_steps: 1500   # 50 s
+
+joints:
+  leg_order: [LHipYawPitch, LHipRoll, LHipPitch, LKneePitch, LAnklePitch, LAnkleRoll,
+              RHipYawPitch, RHipRoll, RHipPitch, RKneePitch, RAnklePitch, RAnkleRoll]
+  # NaoWalkingEnv.LEG_JOINT_LIMITS_DEG (knee lower limit raised to +2 deg, FIX 6)
+  limits_deg:
+    LHipYawPitch: [-65.6, 42.4]
+    LHipRoll:     [-21.7, 45.3]
+    LHipPitch:    [-88.0, 27.7]
+    LKneePitch:   [2.0, 121.0]
+    LAnklePitch:  [-68.1, 52.9]
+    LAnkleRoll:   [-22.8, 44.1]
+    RHipYawPitch: [-65.6, 42.4]
+    RHipRoll:     [-45.3, 21.7]
+    RHipPitch:    [-88.0, 27.7]
+    RKneePitch:   [2.0, 121.0]
+    RAnklePitch:  [-68.0, 53.4]
+    RAnkleRoll:   [-44.1, 22.8]
+  # WEBOTS_T0_POSE_DEG = first frame of Forwards.motion (= first frame of the looped clip)
+  home_pose_deg:
+    LHipYawPitch: 0.0
+    LHipRoll:     1.547
+    LHipPitch:    -28.935
+    LKneePitch:   59.702
+    LAnklePitch:  -30.768
+    LAnkleRoll:   -1.547
+    RHipYawPitch: 0.0
+    RHipRoll:     1.547
+    RHipPitch:    -28.935
+    RKneePitch:   59.702
+    RAnklePitch:  -30.768
+    RAnkleRoll:   -1.547
+  # NaoWalkingEnv.FIXED_JOINT_POSES_DEG (held by PD for the whole episode)
+  fixed_pose_deg:
+    HeadYaw: 0
+    HeadPitch: 0
+    LShoulderPitch: 84
+    LShoulderRoll: 10
+    LElbowYaw: -70
+    LElbowRoll: -25
+    LWristYaw: 0
+    LHand: 0
+    RShoulderPitch: 84
+    RShoulderRoll: -10
+    RElbowYaw: 70
+    RElbowRoll: 25
+    RWristYaw: 0
+    RHand: 0
+
+reference_gait:
+  keyframes:   ../../shared/reference_gaits/forwards_looped_keyframes.npy
+  timestamps:  ../../shared/reference_gaits/forwards_looped_timestamps.npy
+  joint_names: ../../shared/reference_gaits/forwards_looped_joint_names.txt
+  after_end: wrap           # LoopedGait wraps gait time at 52.80 s
+  phase_period_s: 2.64      # one copy of the clip (bookkeeping only, not a policy input)
+
+pgrl:
+  controller: tilt_compensator_v1
