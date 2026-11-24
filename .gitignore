@@ -64,3 +64,8 @@ Thumbs.db
 /build/
 /install/
 /log/
+
+# --- Isaac Sim URDF-import side effect ---
+# The importer writes the NAO texture into <cwd>/materials/textures/ on every
+# run. The one committed copy lives in walking-solutions/shared/materials/.
+/walking-solutions/*/*/materials/
