@@ -4,7 +4,7 @@ gait.py — reference gait playback, reproducing the two training variants.
 * `hold_last` — `WebotsReferenceGait.get_targets` (PPO/SAC): linear
   interpolation of the literal Webots clip; after the last timestamp the
   last frame is held.
-* `wrap` — `LoopedGait.targets` (PGRL, test_28): the clip is periodic with
+* `wrap` — `LoopedGait.targets` (PGRL, walking-solutions/pgrl/baseline_test28): the clip is periodic with
   duration = last timestamp + one frame interval; inside that final interval
   the last frame is blended back into the first.
 

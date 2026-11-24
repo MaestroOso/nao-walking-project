@@ -23,7 +23,7 @@ from nao_rl_bridge.core.deployment_spec import (  # noqa: E402
     DeploymentSpecError, load_deployment)
 
 PPO_YAML = REPO_ROOT / "walking-solutions/ppo/baseline_test24/deployment.yaml"
-LOOPED_GAIT = REPO_ROOT / "experiments/test_27_gait_loop/data"
+LOOPED_GAIT = REPO_ROOT / "walking-solutions/shared/reference_gaits"
 
 
 def _base_dict():
@@ -87,15 +87,15 @@ def test_sac_style_spec_is_valid(tmp_path):
     assert spec.observation.component("linear_velocity").options["frame"] == "heading"
 
 
-@pytest.mark.skipif(not LOOPED_GAIT.is_dir(), reason="test_27 looped gait not present")
+@pytest.mark.skipif(not LOOPED_GAIT.is_dir(), reason="looped gait not present")
 def test_pgrl_style_spec_is_valid(tmp_path):
     d = _base_dict()
     d.update(name="pgrl_example", algorithm="pgrl")
     d["policy"] = {"format": "pgrl_run", "run_dir": str(tmp_path / "run")}
     d["reference_gait"] = {
-        "keyframes": str(LOOPED_GAIT / "looped_keyframes.npy"),
-        "timestamps": str(LOOPED_GAIT / "looped_timestamps.npy"),
-        "joint_names": str(LOOPED_GAIT / "looped_joint_names.txt"),
+        "keyframes": str(LOOPED_GAIT / "forwards_looped_keyframes.npy"),
+        "timestamps": str(LOOPED_GAIT / "forwards_looped_timestamps.npy"),
+        "joint_names": str(LOOPED_GAIT / "forwards_looped_joint_names.txt"),
         "after_end": "wrap", "phase_period_s": 2.64,
     }
     del d["action"], d["observation"]

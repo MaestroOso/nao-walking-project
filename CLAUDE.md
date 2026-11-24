@@ -116,8 +116,8 @@ _Update this section at the end of every session._
 - **Repo:** structure in place per `README.md` — `docs/` (environment
   setup guide + full experiment history), `experiments/` (archival tier,
   12 pivotal experiments migrated with code + learnings), and
-  `walking-solutions/` (working tier: shared robot/gait assets + PPO
-  baseline).
+  `walking-solutions/` (working tier: shared robot/gait assets, the PPO
+  baseline and the PGRL baseline).
 - **Phase 1 (Environment & Isaac Sim Setup):** complete. Isaac Sim 4.5.0
   installed and verified; see `docs/environment-setup/`. Note: actually
   verified on Ubuntu 24.04, not the 22.04 listed in the System
@@ -138,7 +138,10 @@ _Update this section at the end of every session._
   `README.md`.
 - **Phase 6 (Algorithm Experimentation & Analysis):** in progress.
   SAC (`experiments/test_26_sac/`, run `sac_pilot_v2`) is still training.
-  PGRL is planned but not implemented. A common evaluation script for all
+  PGRL is implemented and promoted to `walking-solutions/pgrl/baseline_test28/`
+  (developed in `experiments/test_27_gait_loop` + `experiments/test_28`,
+  run `pgrl_v1`: F_S 0.043 → 0.078, still falls after two steps). A common
+  evaluation script for all
   algorithms is in `experiments/test_evaluation_script/` and implements the
   report's protocol (§4.6.2, §5.1): straight course of D m, deterministic
   policy, 10 repetitions per initial-pose perturbation δ ∈ {0,1,2,4}°,
@@ -155,14 +158,23 @@ _Update this section at the end of every session._
   policies to the real NAO over ROS 2 Jazzy (`naoqi_driver2` for the
   30 Hz joint stream, a direct `qi` session for stiffness, posture, rest
   and e-stop). Each `walking-solutions/<algo>/<variant>/` needs a
-  `deployment.yaml` (written for `ppo/baseline_test24`). The tools,
+  `deployment.yaml` (written for `ppo/baseline_test24` and
+  `pgrl/baseline_test28`). The tools,
   runtime, ROS node and docs are done and tested. Still pending: the final
-  PPO/SAC/PGRL folders with their `deployment.yaml`, their exports (run
+  SAC folder with its `deployment.yaml`, the exports (run
   `export/export_policy.py`), and the runs on the robot. Procedure:
   `robot-integration/docs/deployment-procedure.md`.
-- **Next step:** visually confirm the PPO gait, evaluate SAC when its
-  training finishes, implement the PGRL adapter, and fill chapter 5 of the
-  report.
+- **PGRL promotion (23 Nov 2026):** `walking-solutions/pgrl/baseline_test28/`
+  is self-contained: it has its own copies of the PPO env, of the evaluation
+  episode/F_S code and of `metrics.py`, plus `deployment.yaml`. The looped
+  gait is in `walking-solutions/shared/reference_gaits/forwards_looped_*`.
+  The evaluation script defaults and the robot-integration tests now point
+  there. `runs/` stays gitignored; copy `experiments/test_28/runs/pgrl_v1`
+  into it. Checked from the new folder: same headless result (d 0.531 m,
+  F_S 0.0813) and the first training iteration reproduces bit-for-bit.
+- **Next step:** promote SAC to `walking-solutions/sac/`, run the common
+  evaluation for PPO, SAC and PGRL (`run_all_evaluations.sh`), and fill
+  chapter 5 of the report.
 
 ---
 

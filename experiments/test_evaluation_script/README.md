@@ -62,8 +62,8 @@ DISTANCE=1.5 ./run_all_evaluations.sh --overwrite
 python evaluate_algorithms.py --algo sac --distance 1.0
 python evaluate_algorithms.py --algo sac --model ../test_26_sac/runs/sac_pilot_v3/ckpt_<N>_steps.zip --label SAC_<N>
 python evaluate_algorithms.py --algo ppo --deltas 0 --repetitions 3 --gui    # watch it
-python evaluate_algorithms.py --algo pgrl                                     # test_28 pgrl_v1
-python evaluate_algorithms.py --algo pgrl --model ../test_28/runs/<run> --label PGRL_<run>
+python evaluate_algorithms.py --algo pgrl                                     # pgrl/baseline_test28, pgrl_v1
+python evaluate_algorithms.py --algo pgrl --model ../../walking-solutions/pgrl/baseline_test28/runs/<run> --label PGRL_<run>
 python evaluate_algorithms.py --algo pgrl --pgrl-initial --label PGRL_base    # base gait, no compensator
 
 # Rebuild table/figure only (no Isaac Sim needed)
@@ -77,7 +77,7 @@ Default models (latest version of each algorithm, overridable with `--model` / `
 |---|---|---|
 | `ppo` | `~/nao_walking_project/experiments/test_24/runs/test24/final_model.zip` (27.2M steps, outside the repo; see "PPO model choice") | `walking-solutions/ppo/baseline_test24/` |
 | `sac` | `experiments/test_26_sac/runs/sac_pilot_v3/final_model.zip` (env v3; only v3 checkpoints are valid with the current `test_26_sac` env — v1/v2 models get mismatched observations) | `experiments/test_26_sac/` |
-| `pgrl` | `experiments/test_28/runs/pgrl_v1` (θ from `state.json`, mapped with that run's ranges from `config.json`; run folder is gitignored). `--pgrl-initial` uses the initial parameters instead (label it `PGRL_base`) | `experiments/test_28/` |
+| `pgrl` | `walking-solutions/pgrl/baseline_test28/runs/pgrl_v1` (θ from `state.json`, mapped with that run's ranges from `config.json`; run folder is gitignored, copy it from `experiments/test_28/runs/`). `--pgrl-initial` uses the initial parameters instead (label it `PGRL_base`) | `walking-solutions/pgrl/baseline_test28/` |
 
 The script changes into the env folder before creating the env, because the
 env files resolve the URDF and reference-gait paths relative to the working
@@ -163,18 +163,22 @@ Observations, still to be confirmed:
 
 ## PGRL
 
-`PGRLAdapter` evaluates the PGRL controller from `experiments/test_28`:
+`PGRLAdapter` evaluates the promoted PGRL controller in
+`walking-solutions/pgrl/baseline_test28` (developed in `experiments/test_28`):
 12 parameters (torso-tilt compensator gains, gait frequency/amplitude,
-leg stiffness) on the looped Webots gait from `test_27`.
+leg stiffness) on the looped Webots gait
+(`walking-solutions/shared/reference_gaits/forwards_looped_*`).
 - **No action:** the controller lives inside `PGRLWalkingEnv`. Its `step()`
   ignores the action and `act()` returns `None`.
-- **Same rules as PPO/SAC:** the env subclasses the PPO baseline env, so
-  warm-up, grace period, fall criteria and the time limit are identical. The
-  initial-pose perturbation is applied with the same
-  `make_evaluation_env_class()`.
-- **Same measurement as training:** `test_28` trains with this script's own
-  `run_episode()`, so the F_S optimised in training is the same F_S reported
-  here.
+- **Same rules as PPO/SAC:** the env subclasses a verbatim copy of the PPO
+  baseline env, so warm-up, grace period, fall criteria and the time limit
+  are identical.
+- **Same measurement as training:** the PGRL folder is self-contained and
+  carries copies of this script's `make_evaluation_env_class()` and
+  `run_episode()` (in its `pgrl_episode.py`) and of `metrics.py` (as
+  `pgrl_metrics.py`). The F_S optimised in training is the same F_S
+  reported here. **If you change those functions here, update the copies
+  there too.**
 - **Parameter ranges:** they changed after `pgrl_v1` (gains [−1, 1] →
   [−3, 3]). The adapter reads each run's own ranges from its `config.json`.
 - **Base-gait row of Table 5-3:**

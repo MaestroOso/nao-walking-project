@@ -38,8 +38,10 @@ nao-walking-project/
     ├── README.md                #   how this tier is organized, how to add a 2nd algorithm
     ├── shared/                  #   robot URDF/meshes, materials, reference-gait data —
     │                            #   one canonical copy, referenced by every algorithm below
-    └── ppo/
-        └── baseline_test24/     #   current working forward-walking baseline
+    ├── ppo/
+    │   └── baseline_test24/     #   current working forward-walking baseline
+    └── pgrl/
+        └── baseline_test28/     #   PGRL (12-parameter controller search), self-contained
 ```
 
 `experiments/` and `walking-solutions/` serve different purposes: the
@@ -61,9 +63,15 @@ code alone), the latter is what you'd actually run or build on today.
   `test_24`) that walks forward, currently ~20.9M of a 50M-step training
   target. Lives at `walking-solutions/ppo/baseline_test24/`, referencing
   shared robot/gait assets rather than duplicating them.
-- **Next:** develop and evaluate a second RL algorithm alongside PPO for
-  comparison (see `CLAUDE.md` phase 6), under a new
-  `walking-solutions/<algorithm>/` folder.
+- **PGRL:** finite-difference policy search over 12 controller parameters
+  (torso-tilt compensator, gait frequency/amplitude, leg stiffness) on the
+  looped Webots gait, promoted from `test_28` (run `pgrl_v1`). Lives at
+  `walking-solutions/pgrl/baseline_test28/`. It improves the score but still
+  falls after two steps.
+- **Next:** promote SAC (still in `experiments/test_26_sac`) to
+  `walking-solutions/sac/`, then run the common evaluation
+  (`experiments/test_evaluation_script/`) for PPO, SAC and PGRL (see
+  `CLAUDE.md` phase 6).
 - A separate, unvalidated refactor toward a modular multi-robot training
   structure (`test_25` in the original experiment set) was paused and is
   intentionally not part of this migration.

@@ -2,7 +2,7 @@
 
 The fidelity tests load the REAL training environments from the repo
 (walking-solutions/ppo/baseline_test24, experiments/test_26_sac,
-experiments/test_28) and drive them with a fake simulator object, so the
+walking-solutions/pgrl/baseline_test28) and drive them with a fake simulator object, so the
 robot-side code is compared against the code the policies were trained with.
 No Isaac Sim is needed: the envs only create the simulator in reset().
 """
@@ -22,7 +22,7 @@ sys.path.insert(0, str(PKG_DIR))
 
 PPO_DIR = REPO_ROOT / "walking-solutions/ppo/baseline_test24"
 SAC_DIR = REPO_ROOT / "experiments/test_26_sac"
-PGRL_DIR = REPO_ROOT / "experiments/test_28"
+PGRL_DIR = REPO_ROOT / "walking-solutions/pgrl/baseline_test28"
 URDF = REPO_ROOT / "walking-solutions/shared/robot/nao.urdf"
 PPO_YAML = PPO_DIR / "deployment.yaml"
 sys.dont_write_bytecode = True     # keep the training folders free of __pycache__
@@ -185,14 +185,14 @@ def sac_spec_dict():
 
 
 def pgrl_spec_dict(run_dir="run"):
-    looped = REPO_ROOT / "experiments/test_27_gait_loop/data"
+    looped = REPO_ROOT / "walking-solutions/shared/reference_gaits"
     d = spec_dict()
     d.update(name="pgrl_test", algorithm="pgrl")
     d["policy"] = {"format": "pgrl_run", "run_dir": str(run_dir)}
     d["reference_gait"] = {
-        "keyframes": str(looped / "looped_keyframes.npy"),
-        "timestamps": str(looped / "looped_timestamps.npy"),
-        "joint_names": str(looped / "looped_joint_names.txt"),
+        "keyframes": str(looped / "forwards_looped_keyframes.npy"),
+        "timestamps": str(looped / "forwards_looped_timestamps.npy"),
+        "joint_names": str(looped / "forwards_looped_joint_names.txt"),
         "after_end": "wrap", "phase_period_s": 2.64,
     }
     del d["action"], d["observation"]

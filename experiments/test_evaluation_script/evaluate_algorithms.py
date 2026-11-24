@@ -37,7 +37,7 @@ Usage (inside the Isaac Sim Python environment):
     python evaluate_algorithms.py --algo ppo --distance 1.0
     python evaluate_algorithms.py --algo sac --distance 1.5 --deltas 0 1 2 4
     python evaluate_algorithms.py --algo sac --model path/to/ckpt.zip --label SAC_ckpt4M
-    python evaluate_algorithms.py --algo pgrl                       # test_28 pgrl_v1
+    python evaluate_algorithms.py --algo pgrl                       # pgrl/baseline_test28, pgrl_v1
     python evaluate_algorithms.py --algo pgrl --pgrl-initial --label PGRL_base
 """
 
@@ -86,10 +86,11 @@ ALGO_DEFAULTS = {
         "env_dir": REPO_ROOT / "experiments/test_26_sac",
     },
     "pgrl": {
-        # PGRL run pgrl_v1 (166 iterations, 1992 evaluations, gains in [-1, 1]).
-        # Run folders are gitignored; re-create with test_28/run_chunked_training.sh.
-        "model": REPO_ROOT / "experiments/test_28/runs/pgrl_v1",
-        "env_dir": REPO_ROOT / "experiments/test_28",
+        # Promoted PGRL solution, run pgrl_v1 (166 iterations, 1992 evaluations,
+        # gains in [-1, 1]). runs/ is gitignored: copy it from
+        # experiments/test_28/runs/pgrl_v1 (see the PGRL folder README.md).
+        "model": REPO_ROOT / "walking-solutions/pgrl/baseline_test28/runs/pgrl_v1",
+        "env_dir": REPO_ROOT / "walking-solutions/pgrl/baseline_test28",
     },
 }
 
@@ -187,27 +188,29 @@ class SB3Adapter(PolicyAdapter):
 
 
 class PGRLAdapter(PolicyAdapter):
-    """PGRL controller from experiments/test_28 (report §4.5.3).
+    """PGRL controller from walking-solutions/pgrl/baseline_test28 (report §4.5.3).
 
     The policy is the 12-parameter vector θ found by PGRL (4 torso-tilt
     compensator gains, gait frequency / amplitude factors, 6 leg stiffness
-    factors) applied to the looped Webots gait of test_27. The controller
+    factors) applied to the looped Webots gait
+    (walking-solutions/shared/reference_gaits/forwards_looped_*). The controller
     lives INSIDE the env (`PGRLWalkingEnv.step()` computes the joint targets
     from the parameters and ignores its `action` argument), so act() returns
     nothing.
 
     * `model_path`: a run folder or its `state.json` (e.g.
-      experiments/test_28/runs/pgrl_v1). θ is mapped to physical values with
+      walking-solutions/pgrl/baseline_test28/runs/pgrl_v1). θ is mapped to physical values with
       the parameter ranges THAT run was trained with (its config.json),
       because the ranges changed after pgrl_v1 (gains [-1,1] -> [-3,3]).
     * `initial=True`: ignore the model and use the initial parameters
       (gains 0, f = a = 1, stiffness 1) — the "PGRL base gait without
       compensator" row of Table 5-3 (use --label PGRL_base).
 
-    The env subclasses the PPO baseline NaoWalkingEnv, so warm-up, grace
-    period, fall criteria and the 1500-step limit are the same as PPO/SAC;
-    make_evaluation_env_class() adds the initial-pose perturbation exactly as
-    for the other algorithms.
+    The env subclasses a verbatim copy of the PPO baseline NaoWalkingEnv
+    (kept in the PGRL folder), so warm-up, grace period, fall criteria and the
+    1500-step limit are the same as PPO. The PGRL folder carries its own copy
+    of make_evaluation_env_class() / run_episode() (identical code), which is
+    what wraps the env here.
     """
 
     def __init__(self, model_path, env_dir, initial=False):
@@ -239,8 +242,8 @@ class PGRLAdapter(PolicyAdapter):
             print(f"[eval]   {n:16s} {v:+.3f}")
 
     def make_env(self, render_mode):
-        # pgrl_episode.make_env() wraps PGRLWalkingEnv with this script's
-        # make_evaluation_env_class() and changes into the baseline env folder
+        # pgrl_episode.make_env() wraps PGRLWalkingEnv with the PGRL folder's
+        # copy of make_evaluation_env_class() and changes into that folder
         # (asset paths are relative to the CWD, as for PPO/SAC).
         from pgrl_episode import make_env
         env = make_env(render_mode)

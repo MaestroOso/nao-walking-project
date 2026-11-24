@@ -113,7 +113,7 @@ pgrl:
   controller: tilt_compensator_v1
 ```
 
-`tilt_compensator_v1` (from `experiments/test_28/pgrl_env.py`):
+`tilt_compensator_v1` (from `walking-solutions/pgrl/baseline_test28/pgrl_env.py`):
 `q* = clip(q_home + a·(q_ref(f·t) − q_home) + Δq, limits)`, where Δq adds
 `K_ank_pitch·g_x` / `K_hip_pitch·g_x` to ankle/hip pitch and
 `K_ank_roll·g_y` / `K_hip_roll·g_y` to ankle/hip roll on both legs.

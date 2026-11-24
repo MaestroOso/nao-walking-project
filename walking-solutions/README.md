@@ -12,7 +12,7 @@ assets below rather than duplicating them per algorithm/experiment.
 ```
 walking-solutions/
 ├── shared/                # assets common to every algorithm — see below
-└── <algorithm>/            # one folder per RL algorithm, e.g. ppo/
+└── <algorithm>/            # one folder per RL algorithm, e.g. ppo/, pgrl/
     └── <variant_name>/     # a specific trained/training result for that algorithm
 ```
 
@@ -26,9 +26,13 @@ walking-solutions/
   nothing in the code actually references these — carried forward for
   now in case they're used manually inside the Isaac Sim UI.
 - `shared/reference_gaits/` — captured Webots motion-capture keyframes
-  (currently just the one `forwards` gait) used as an action-space
-  scaffold by the PPO baseline. Regeneratable via
-  `nao_walking_project/webots/extract_forward_motion.py` if needed.
+  (the one `forwards` gait):
+  - `forwards_*`: the literal 2.6 s clip, used as an action-space scaffold
+    by the PPO baseline. Regeneratable via
+    `nao_walking_project/webots/extract_forward_motion.py` if needed.
+  - `forwards_looped_*`: the same clip tiled to 52.76 s, used as the base
+    gait by the PGRL baseline. Regenerate with
+    `pgrl/baseline_test28/build_looped_gait.py`.
 
 Every algorithm/variant folder references these via `../../shared/...`
 relative paths — see any `<algorithm>/<variant>/README.md` for specifics.
@@ -52,3 +56,8 @@ the same walking task (see `CLAUDE.md` phase 6). To add one:
 - [`ppo/baseline_test24/`](ppo/baseline_test24/README.md) — the current
   working baseline (~20.9M/50M target steps), promoted from
   `experiments/test_24`.
+- [`pgrl/baseline_test28/`](pgrl/baseline_test28/README.md) — PGRL
+  (finite-difference policy search on 12 controller parameters over the
+  looped Webots gait), run `pgrl_v1`, promoted from `experiments/test_28`.
+  Self-contained: it carries its own copies of the PPO env and of the
+  evaluation episode/metric code.

@@ -1,6 +1,6 @@
 """Tests for export_policy.py with throwaway models (no real training results).
 
-* PGRL: a fake run folder, checked against experiments/test_28/pgrl_params.py.
+* PGRL: a fake run folder, checked against walking-solutions/pgrl/baseline_test28/pgrl_params.py.
 * PPO / SAC: tiny SB3 models on a dummy 23 -> 12 env; needs torch + SB3, so run
   in the Isaac/SB3 env:   setup/isaac_env/bin/python robot-integration/export/test_export.py
   (with system pytest, the SB3 tests are skipped).
@@ -24,7 +24,7 @@ from nao_rl_bridge.core.exported import load_export  # noqa: E402
 
 REPO = E.REPO_ROOT
 PPO_YAML = REPO / "walking-solutions/ppo/baseline_test24/deployment.yaml"
-TEST28 = REPO / "experiments/test_28"
+PGRL_DIR = REPO / "walking-solutions/pgrl/baseline_test28"
 
 
 def _solution(tmp: Path, d: dict) -> Path:
@@ -45,21 +45,21 @@ def _ppo_dict():
 def test_pgrl_export_roundtrip():
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
-        looped = REPO / "experiments/test_27_gait_loop/data"
+        looped = REPO / "walking-solutions/shared/reference_gaits"
         d = _ppo_dict()
         d.update(name="pgrl_t", algorithm="pgrl")
         d["policy"] = {"format": "pgrl_run", "run_dir": str(tmp / "run")}
-        d["reference_gait"] = {"keyframes": str(looped / "looped_keyframes.npy"),
-                               "timestamps": str(looped / "looped_timestamps.npy"),
-                               "joint_names": str(looped / "looped_joint_names.txt"),
+        d["reference_gait"] = {"keyframes": str(looped / "forwards_looped_keyframes.npy"),
+                               "timestamps": str(looped / "forwards_looped_timestamps.npy"),
+                               "joint_names": str(looped / "forwards_looped_joint_names.txt"),
                                "after_end": "wrap", "phase_period_s": 2.64}
         del d["action"], d["observation"]
         d["pgrl"] = {"controller": "tilt_compensator_v1"}
         sol = _solution(tmp, d)
-        shutil.copy(TEST28 / "pgrl_params.py", sol / "pgrl_params.py")   # enables the cross-check
+        shutil.copy(PGRL_DIR / "pgrl_params.py", sol / "pgrl_params.py")   # enables the cross-check
         (tmp / "run").mkdir()
         theta = np.linspace(0, 1, 12)
-        sys.path.insert(0, str(TEST28))
+        sys.path.insert(0, str(PGRL_DIR))
         import pgrl_params as P
         (tmp / "run/state.json").write_text(json.dumps({"iteration": 3, "evals": 36, "theta": theta.tolist()}))
         (tmp / "run/config.json").write_text(json.dumps({"param_specs": P.PARAM_SPECS}))
