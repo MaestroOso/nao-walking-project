@@ -48,8 +48,32 @@
 # a one-off -100 reward on the falling step (env penalty_fall=100); every
 # other setting is identical to v4 (tilt weight still 0.5). FRESH start:
 # v4's replay buffer stores rewards without the penalty.
-RUN_NAME="sac_pilot_v5"
-MAX_WALLCLOCK_SECONDS=43200  # 12 hour batch (v5; v3/v4 used 8 h). [v2 run] Previous 12h block (3,255,000
+#
+# v6: CONSTANT ALIVE BONUS (see APPROACH.md "Constant alive bonus + stronger yaw-rate penalty (v6)").
+# sac_pilot_v5 (1,230,000 steps, 12 h) stopped falling but only shuffled
+# (~0.06 m/s): the growing alive bonus 1 + step/500 (up to 4/step) made
+# survival worth ~8x the forward reward. v6 uses a constant 1.0/step
+# (env alive_scale=None), AND raises the yaw-rate penalty 0.5 -> 5.0
+# (v5 slowly turned ~90 deg clockwise; a slow turn cost ~0.05/step).
+# Everything else is identical to v5 (fall penalty 100, tilt 0.5).
+# FRESH start: v5's buffer has the old rewards.
+#
+# v7: YAW-RATE PENALTY BACK TO 0.5, constant alive bonus kept (see
+# APPROACH.md "sac_pilot_v6 outcome and v7"). sac_pilot_v6 (1,275,000
+# steps) never survived past ~0.7 s of gait: at w=5 the gait's own yaw
+# oscillation cost more per step than the alive bonus, so falling early
+# scored best. v7 = v5 with only the constant alive bonus changed.
+# FRESH start: v6's buffer has the w=5 rewards.
+#
+# v8: TIGHTER FALL DETECTION (see APPROACH.md "sac_pilot_v7 outcome and
+# v8"). sac_pilot_v7 (840,000 steps, 8 h) learned to fall face-down and lie
+# there: base at ~0.11 m, tilt ~106 deg, neither limit (0.10 m / ~145 deg)
+# triggered, so it avoided the -100 and collected alive - tilt ~ +0.5/step.
+# v8 terminates at height < 0.20 m OR tilt > 60 deg from vertical; reward
+# identical to v7. FRESH start: v7's buffer holds lying-down transitions
+# that were not terminal.
+RUN_NAME="sac_pilot_v8"
+MAX_WALLCLOCK_SECONDS=43200  # 12 h batch per launch (v8: first batch 0 -> 1,275,000; resumed 2026-11-25 for 12 h). v7: 8 h. v6: 8 h, stopped at 225k when the machine shut down, resumed 2026-11-23 for 12 h. [v2 run] Previous 12h block (3,255,000
                              # -> 4,290,000 steps) raised training-time
                              # ep_len_mean 76->84 and ep_rew_mean 287->315,
                              # but the DETERMINISTIC checkpoint eval was

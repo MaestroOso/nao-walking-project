@@ -1019,6 +1019,166 @@ clockwise turn and a sideways fall. Warmup stand is still.
 Lopsided offsets persist (LHipRoll +12.7°, LAnkleRoll −7.5°; ~35 % of
 action components saturated).
 
+## Constant alive bonus + stronger yaw-rate penalty (v6) — 2026-11-19
+
+**Change:** `alive_scale=None` (new default) makes the alive bonus a
+constant `w_alive = 1.0` per step instead of `1 + step/500`. Over a full
+1500-step episode survival is now worth 1,500 (v5: ≈ 3,750), so 1 m of
+forward travel (150) ≈ 5 s of survival. The −100 fall penalty, tilt
+weight 0.5 and everything else are unchanged from v5, except one
+second change made deliberately in the same run:
+
+**Yaw-rate penalty raised 0.5 → 5.0** (`penalty_yaw_rate`). v5 turned
+~90° clockwise slowly (≈ 90° in 5 s ≈ 0.31 rad/s), which cost only
+≈ 0.05/step at w = 0.5; at w = 5 it costs ≈ 0.5/step, half the alive
+bonus. The yaw rate is already observed (body angular velocity), so no
+new observations are needed. It penalizes turning *while* it happens, but
+does not undo heading already lost. Because v6 changes two terms, any
+difference from v5 cannot be attributed to one of them alone.
+
+Fresh run
+`runs/sac_pilot_v6/`, 8 h batch (v5 used 12 h; compare at equal step counts).
+
+**Considered and not applied:** rewarding progress along the fixed start
+direction (to stop the slow turning). It would require exposing heading
+to the policy (2 extra observations), and the observation vector is
+frozen at 23 for this comparison, so it was discarded.
+
+## sac_pilot_v6 outcome and v7 (yaw-rate penalty back to 0.5) — 2026-11-24
+
+**v6 result: failed.** 1,275,000 steps (8 h stopped at 225k by a machine
+shutdown, then resumed for 12 h). Mean training episode length stayed at
+81–86 steps for the whole run (60 warm-up + < 1 s of gait); no episode
+reached 1500 (max 166). The deterministic final model falls at step 81
+(0.375 m); 5 stochastic episodes fall at steps 80–83. The zero-action
+reference gait lasts 120 steps.
+
+**Cause: the yaw-rate penalty at w = 5 outweighs the alive bonus.** The
+gait itself makes the base yaw back and forth every step. Per-term
+breakdown under the v6 reward (headless, deterministic, per gait step):
+
+| | v5 policy (1500 steps) | v6 policy (falls at 81) | zero action (falls at 120) |
+|---|---|---|---|
+| forward | +0.35 | +2.06 | +0.86 |
+| alive | +1.00 | +1.00 | +1.00 |
+| yaw rate (w = 5) | −1.51 | −2.85 | −3.13 |
+| \|yaw rate\| mean / rms | 0.41 / 0.55 rad/s | 0.53 / 0.76 | 0.42 / 0.79 |
+| net per step | −0.18 | −0.06 | −1.37 |
+| episode total | −192 | −52 | −122 |
+
+Surviving the whole episode with the v5 gait scores −192; lunging and
+falling at once scores −52, so the optimum is to fall early. The penalty
+mostly charges the per-step yaw oscillation, not the slow drift it was
+meant to stop (v5's drift was −34° in 48 s ≈ 0.012 rad/s). The 0.31 rad/s
+estimate above came from the GUI run's turn and was not checked against
+the gait's normal oscillation before training.
+
+**v7 change:** `penalty_yaw_rate` back to 0.5. The constant alive bonus
+(`alive_scale=None`) is kept, so v7 differs from v5 in that one term only.
+With the v5 gait this gives ≈ +1.2 per step (forward 0.35 + alive 1 − yaw
+0.15 − tilt/lateral 0.02), so survival pays again, but 1 m of travel (150)
+is now worth ~5 s of survival instead of ~1.3 s. Fresh run
+`runs/sac_pilot_v7/`, 8 h batch.
+
+## sac_pilot_v7 outcome and v8 (tighter fall detection) — 2026-11-24
+
+**v7 result: reward hacking.** 840,000 steps, 8 h. The training curve
+looked like a breakthrough at ~200k (mean episode length 92 → 855 → ~1300,
+~60 full-length episodes per 100k), earlier than v5. The deterministic
+evaluation shows why: the robot pitches forward right after the warm-up
+and lies face-down for the rest of the episode.
+
+| Step | Base height | Tilt from spawn | Forward |
+|---|---|---|---|
+| 60 (end of warm-up) | 0.317 m | 2.6° | 0.01 m |
+| 75 | 0.309 m | 17° | 0.16 m |
+| 90 | 0.111 m | 106° | 0.51 m |
+| 120–1500 | 0.105–0.114 m | 105–108° | 0.53–0.61 m |
+
+2 of 3 stochastic episodes did the same; the third rolled over (> 145°) and
+terminated at step 99. v5 under the same script: upright, 2.97 m, max roll
+12.9°.
+
+**Cause: a termination loophole, present since v1.** A fall was only
+detected at base height < 0.10 m or > ~145° rotation from spawn. Lying on
+its front (0.11 m, 106°) triggered neither, so the −100 fall penalty was
+never paid and each step earned alive 1.0 − tilt 0.5·(g_x²+g_y²) ≈ +0.5,
+≈ +700 over the episode. v5's growing alive bonus made standing far more
+valuable than lying; with the constant bonus lying became the easiest
+positive return.
+
+**v8 change:** termination (and so the −100) also when
+- base height < **0.20 m** (was 0.10; standing ≈ 0.31 m), or
+- body z-axis tilt > **60°** from world vertical (`term_tilt_deg`, new;
+  `1 − 2(x² + y²) < cos 60°` on the (w,x,y,z) quaternion, yaw-independent).
+
+Reward identical to v7 (constant alive 1.0, yaw-rate 0.5, tilt 0.5, fall
+100). Fresh run `runs/sac_pilot_v8/`, 12 h batch.
+
+**Evaluation note:** `experiments/test_evaluation_script` detects falls
+through each env's own termination, so with the old limits a robot lying
+on the ground counts as a timeout, not a fall. Not changed yet.
+
+## sac_pilot_v8 outcome — 2026-11-26
+
+**Result: first SAC policy that walks.** Two 12 h batches on the same run:
+0 → 1,275,000 steps (2026-11-24/25), resumed to **2,565,000 steps**
+(2026-11-25/26; one chunk segfaulted, exit 139, and was retried
+automatically). Reward identical to v7; only the v8 fall limits changed.
+
+Learning curve (training episodes, with exploration noise):
+
+| Steps | Mean ep length | Eps reaching 1500 | Mean reward |
+|---|---|---|---|
+| 0–100k | 98 | 0 | −31 |
+| 200–300k | 1046 | 29 / 96 | 826 |
+| 400–500k | 1158 | 44 / 87 | 1185 |
+| 800–900k | 1150 | 39 / 86 | 1462 |
+| 1.2–1.3M | 975 | 25 / 103 | 1492 |
+| 1.6–1.7M | 1032 | 32 / 97 | 1911 |
+| 2.0–2.1M | 1095 | 39 / 92 | 2245 |
+| 2.4–2.5M | 1057 | 28 / 64 | 2298 |
+
+Broke through at ~200k (v5: 300–500k). After that, episode length stays
+~1,000–1,100 while reward keeps rising: the gain is speed, not survival.
+
+Headless evaluation (48 s of gait after the warm-up; distance = straight
+line start → end):
+
+| Model | Policy | Steps | Distance | Speed | Heading change | Max roll | End |
+|---|---|---|---|---|---|---|---|
+| final (2.565M) | deterministic | 1500 | 17.5 m | 0.37 m/s | +100° | 14° | time limit |
+| final | stochastic 1 | 1500 | 15.7 m | 0.33 m/s | −62° | 14° | time limit |
+| final | stochastic 2 | 1500 | 14.0 m | 0.29 m/s | +124° | 18° | time limit |
+| final | stochastic 3 | 567 | 5.6 m | 0.33 m/s | −145° | 13° | turned 145°, upright |
+| ckpt 1.275M | deterministic | 684 | 3.5 m | 0.17 m/s | +146° | 13° | turned 145°, upright |
+| ckpt 1.275M | stochastic ×3 | 1500 | 8.2–11.5 m | 0.17–0.24 m/s | −58°…+89° | 16–21° | time limit |
+| v5 final | deterministic | 1500 | 3.1 m | 0.065 m/s | −36° | 13° | time limit |
+
+No real fall in any headless episode: base height stays 0.29–0.32 m and
+tilt 4–12° (traced step by step at 1.275M). Early endings come from the
+original orientation check `|⟨q, q_spawn⟩| < 0.3`, which includes yaw, so
+turning ~145° counts as a fall (−100) even when upright.
+
+**GUI (`evaluate_policy.py`, final model):** falls at step 137 (2.6 s of
+gait), 1.11 m, ≈ 0.43 m/s while walking; the 1.275M model lasted 254 steps
+(6.5 s, 0.74 m). Observed by the user: it starts walking, turns slightly to
+the left, then tries to keep walking straight and falls forward. As with
+v5, GUI ≠ headless (`world.step(render=True)`), and the gap grows with the
+faster gait. Report the headless numbers.
+
+**Known issues:**
+- Heading drift of ±60–125° over 48 s, in either direction; the policy
+  cannot observe heading, so it cannot correct it.
+- The yaw-inclusive orientation check labels a 145° turn as a fall
+  (also in `evaluate_policy.py` and the common evaluation, which use the
+  env's own termination). `evaluate_policy.py` labels v8 falls "unknown"
+  (it does not know the tilt/height limits) and reads `quat[3]` for its
+  "tilt(qw=…)" label, which is z in (w,x,y,z).
+- The common evaluation script still uses each env's limits, so for v1–v7
+  envs a robot lying on the ground would count as a timeout.
+- Not promoted yet: `walking-solutions/sac/baseline_test26` is still v5.
+
 ## Next steps
 
 - **Superseded by the quaternion fix above:** the v2 body-frame revision

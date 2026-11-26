@@ -259,10 +259,17 @@ class NaoWalkingEnv(gym.Env):
         penalty_fall=100.0,      # v5: one-off penalty on the step the episode
                                  # TERMINATES (fall), never on truncation (time limit)
         penalty_lateral_vel=0.5,
-        penalty_yaw_rate=0.5,
-        alive_scale=500.0,
-        term_height=0.10,
+        penalty_yaw_rate=0.5,    # v7: back to 0.5. v6 used 5.0, but the gait's own
+                                 # step-to-step yaw oscillation (~0.55 rad/s rms) then
+                                 # cost ~1.5/step > alive bonus, so falling early paid best
+        alive_scale=None,        # v6: None = constant alive bonus (w_alive per step).
+                                 # v5 and earlier: 500.0 -> bonus grew 1 -> 4 per step
+        term_height=0.20,        # v8: raised from 0.10. v7 lay face-down with the base
+                                 # at ~0.11 m (standing ~0.31 m) and never terminated
         term_orient_qw=0.3,
+        term_tilt_deg=60.0,      # v8: fall if the body z-axis tilts > 60 deg from world
+                                 # vertical (v7 lay at ~106 deg; v5 upright max ~13 deg).
+                                 # None disables the check (v7 and earlier)
         grace_period=50,
     ):
         super().__init__()
@@ -298,6 +305,7 @@ class NaoWalkingEnv(gym.Env):
         self.alive_scale    = alive_scale
         self.term_height    = term_height
         self.term_orient_qw = term_orient_qw
+        self.term_tilt_deg  = term_tilt_deg
         self.grace_period   = grace_period
 
         self.n_legs = len(self.LEG_JOINT_NAMES)
@@ -867,7 +875,12 @@ class NaoWalkingEnv(gym.Env):
             yaw_rate = float(self._get_angular_velocity(quat)[2]) / 0.25
 
         r_forward = self.w_forward * forward_vel
-        r_alive   = self.w_alive * (1.0 + self._step_count / max(self.alive_scale, 1.0))
+        # v6: constant by default (alive_scale=None). The v5 growing bonus
+        # (1 + step/500, reaching 4/step) made survival worth ~8x the
+        # forward reward over a full episode, so the policy learned to
+        # shuffle in place (see APPROACH.md "sac_pilot_v5 outcome").
+        growth    = 0.0 if self.alive_scale is None else self._step_count / max(self.alive_scale, 1.0)
+        r_alive   = self.w_alive * (1.0 + growth)
         r_lateral = -self.w_lateral * (lateral_vel ** 2)
         r_yaw     = -self.w_yaw * (yaw_rate ** 2)
 
@@ -899,6 +912,14 @@ class NaoWalkingEnv(gym.Env):
             # that coincidence.)
             if abs(float(np.dot(quat, self.SPAWN_QUAT_WXYZ))) < self.term_orient_qw:
                 return True
+            # v8 tilt check (see APPROACH.md "sac_pilot_v7 outcome and v8").
+            # World-z component of the body z-axis for a (w,x,y,z) quaternion:
+            # R[2,2] = 1 - 2(x^2 + y^2) = cos(tilt from vertical). Independent
+            # of yaw, so turning never triggers it.
+            if self.term_tilt_deg is not None:
+                w, x, y, z = (float(v) for v in quat)
+                if 1.0 - 2.0 * (x * x + y * y) < np.cos(np.radians(self.term_tilt_deg)):
+                    return True
         return False
 
     def close(self):

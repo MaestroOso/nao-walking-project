@@ -164,7 +164,12 @@ with open(os.path.join(run_dir, "config.txt"), "w") as f:
             "(see APPROACH.md 'Quaternion convention fix'). Env v4: residual "
             f"actions ignored during the {env.unwrapped.gait_warmup_steps}-step warmup "
             f"stand (warmup_actions={env.unwrapped.warmup_actions}). Env v5: one-off "
-            f"fall penalty -{env.unwrapped.w_fall} on termination (not truncation)\n")
+            f"fall penalty -{env.unwrapped.w_fall} on termination (not truncation). "
+            f"Env v6: alive_scale={env.unwrapped.alive_scale} (None = constant "
+            f"alive bonus {env.unwrapped.w_alive}/step), yaw-rate penalty "
+            f"w={env.unwrapped.w_yaw} (v6 used 5.0; v7 back to 0.5). Env v8: fall "
+            f"termination at height < {env.unwrapped.term_height} m (was 0.10) or "
+            f"tilt > {env.unwrapped.term_tilt_deg} deg from vertical (new)\n")
     f.write(f"SAC (SB3 2.7.1 defaults except net_arch/gamma matched to test_24): "
             f"lr={args.lr}, net_arch=[128,128], buffer_size=1_000_000, "
             f"learning_starts=100, batch_size=256, tau=0.005, gamma=0.99, "
